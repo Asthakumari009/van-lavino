@@ -1,0 +1,425 @@
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=Space+Mono:wght@400;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gold: #c17820;
+  --gold-light: #e2b066;
+  /* These names are historical — they now hold the ivory/ink values of the
+     luxury-SaaS light theme. Kept under the old names so existing usages in
+     this file continue to work. */
+  --obsidian: #eadfc5;       /* page bg (warm sand) */
+  --obsidian-ink: #0a0908;   /* deep ink kept for contrast on gold */
+  --cream: #000000;          /* primary ink (pure black) */
+  --cream-light: #0a0706;    /* emphasis */
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--obsidian); color: var(--cream); font-family: 'DM Sans', sans-serif; }
+
+/* Luxury scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: #dccfb0; }
+::-webkit-scrollbar-thumb { background: var(--gold); border-radius: 2px; }
+
+/* Gold shimmer animation */
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.gold-shimmer {
+  background: linear-gradient(90deg, var(--gold), #f0d080, var(--gold));
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shimmer 3s linear infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-12px); }
+}
+.float { animation: float 6s ease-in-out infinite; }
+
+/* Marquee */
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.marquee-track {
+  display: flex;
+  width: max-content;
+  animation: marquee 40s linear infinite;
+}
+
+/* Scrollbar hide utility */
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { scrollbar-width: none; -ms-overflow-style: none; }
+
+/* Route fade */
+@keyframes routeFade {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.route-fade { animation: routeFade 0.3s ease-out; }
+
+/* Reusable card hover shimmer */
+.card-shimmer { transition: box-shadow 0.4s ease, transform 0.4s ease; }
+.card-shimmer:hover { box-shadow: 0 0 40px rgba(193, 120, 32, 0.2); }
+
+/* Skeleton sweep (left-to-right) for loading blocks */
+@keyframes skeletonSweep {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-sweep {
+  background: linear-gradient(
+    90deg,
+    rgba(193, 120, 32, 0.04) 0%,
+    rgba(193, 120, 32, 0.12) 50%,
+    rgba(193, 120, 32, 0.04) 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonSweep 1.6s linear infinite;
+}
+
+/* Card gold-border pulse (used when an item is added to cart) */
+@keyframes goldBorderPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(193, 120, 32, 0.55); }
+  100% { box-shadow: 0 0 0 10px rgba(193, 120, 32, 0); }
+}
+.gold-pulse { animation: goldBorderPulse 0.45s ease-out; }
+
+/* Fade + rise — used by the 3-up testimonials carousel on rotation. */
+@keyframes fadeRise {
+  0%   { opacity: 0; transform: translateY(18px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.animate-fadeRise { animation: fadeRise 0.7s cubic-bezier(0.25, 0.9, 0.3, 1) both; }
+
+/* ------------------------------------------------------------------
+   Blog article typography — magazine-style.
+   Scoped to .prose-article and only styles tags we sanitize to render
+   (see BlogPostPage.tsx ALLOWED_TAGS). Drop cap on the first paragraph,
+   Cormorant headings with gold rule above, dramatic pull quotes.
+   ------------------------------------------------------------------ */
+.prose-article {
+  color: var(--cream);
+  font-size: 1.125rem;        /* 18px base, magazine size */
+  line-height: 1.78;
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+}
+.prose-article > * + * { margin-top: 1.4em; }
+.prose-article p {
+  color: rgba(0, 0, 0, 0.84);
+}
+
+/* Drop cap on the first paragraph — Cormorant italic, gold, four-line tall.
+   Skips lists/headings naturally because we use :first-of-type p. */
+.prose-article > p:first-of-type::first-letter {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 500;
+  color: var(--gold);
+  float: left;
+  font-size: 4.6em;
+  line-height: 0.85;
+  margin: 0.05em 0.12em -0.05em -0.04em;
+  padding: 0.05em 0.04em 0 0;
+}
+
+/* Headings — Cormorant italic with a thin gold rule above */
+.prose-article h2,
+.prose-article h3,
+.prose-article h4 {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  color: var(--cream);
+  line-height: 1.18;
+  letter-spacing: -0.012em;
+  margin-top: 2em;
+  margin-bottom: 0.55em;
+  font-weight: 500;
+}
+.prose-article h2 {
+  font-size: 2.25rem;
+  position: relative;
+  padding-top: 1.15em;
+}
+.prose-article h2::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 56px;
+  height: 1px;
+  background: var(--gold);
+  opacity: 0.85;
+}
+.prose-article h3 { font-size: 1.65rem; }
+.prose-article h4 { font-size: 1.3rem; }
+
+.prose-article a {
+  color: var(--gold);
+  text-decoration: underline;
+  text-decoration-color: rgba(193, 120, 32, 0.4);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  transition: text-decoration-color 0.25s, color 0.25s;
+}
+.prose-article a:hover {
+  color: #a3621a;
+  text-decoration-color: var(--gold);
+}
+.prose-article strong { color: var(--cream-light); font-weight: 600; }
+.prose-article em {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.04em;
+  font-weight: 500;
+}
+
+.prose-article ul,
+.prose-article ol { padding-left: 1.5em; }
+.prose-article ul { list-style: disc outside; }
+.prose-article ol { list-style: decimal outside; }
+.prose-article li { margin: 0.5em 0; padding-left: 0.25em; }
+.prose-article li::marker { color: var(--gold); }
+
+/* Pull quotes — large Cormorant italic with a gold open-quote ornament */
+.prose-article blockquote {
+  position: relative;
+  border-left: 2px solid var(--gold);
+  padding: 0.4em 0 0.4em 1.4em;
+  margin: 2em 0;
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 1.55rem;
+  line-height: 1.4;
+  color: var(--cream-light);
+}
+.prose-article blockquote::before {
+  content: '“';
+  position: absolute;
+  top: -0.3em;
+  left: 0.3em;
+  font-size: 4.5em;
+  line-height: 1;
+  color: rgba(193, 120, 32, 0.18);
+  font-family: 'Cormorant Garamond', serif;
+  pointer-events: none;
+  z-index: -1;
+}
+.prose-article blockquote p { margin: 0; color: inherit; }
+
+.prose-article img,
+.prose-article figure img {
+  border-radius: 20px;
+  border: 1px solid rgba(193, 120, 32, 0.15);
+  margin: 2em auto;
+  width: 100%;
+  height: auto;
+  box-shadow: 0 30px 80px -40px rgba(10, 7, 5, 0.45);
+}
+.prose-article figure { margin: 2.4em 0; }
+.prose-article figcaption {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.25em;
+  color: rgba(0, 0, 0, 0.52);
+  text-align: center;
+  margin-top: 0.75em;
+}
+
+/* HR — gold ornament divider */
+.prose-article hr {
+  border: none;
+  height: 12px;
+  margin: 2.8em auto;
+  background-image: radial-gradient(
+    circle,
+    rgba(193, 120, 32, 0.6) 0,
+    rgba(193, 120, 32, 0.6) 1.5px,
+    transparent 2px
+  );
+  background-size: 18px 12px;
+  background-repeat: repeat-x;
+  background-position: center;
+  width: 60%;
+  opacity: 0.65;
+}
+
+.prose-article code {
+  background: rgba(193, 120, 32, 0.1);
+  border: 1px solid rgba(193, 120, 32, 0.18);
+  border-radius: 4px;
+  padding: 0.12em 0.4em;
+  font-family: 'Space Mono', monospace;
+  font-size: 0.88em;
+  color: var(--cream-light);
+}
+
+/* Tables — restrained, gold rules */
+.prose-article table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1.5em 0;
+  font-size: 0.95em;
+}
+.prose-article th,
+.prose-article td {
+  padding: 0.75em 1em;
+  border-bottom: 1px solid rgba(193, 120, 32, 0.18);
+  text-align: left;
+}
+.prose-article th {
+  font-family: 'Space Mono', monospace;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: var(--gold);
+  border-bottom-width: 2px;
+}
+
+/* Menu hero parallax — only the fixed attachment behaviour on desktop */
+.hero-parallax {
+  background-size: cover;
+  background-position: center;
+}
+@media (min-width: 768px) {
+  .hero-parallax { background-attachment: fixed; }
+}
+
+/* Animated checkmark (OrderSuccess) */
+@keyframes drawCircle { to { stroke-dashoffset: 0; } }
+@keyframes drawTick { to { stroke-dashoffset: 0; } }
+@keyframes popIn {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.check-mark { animation: popIn 0.5s ease-out; }
+.check-circle {
+  fill: none;
+  stroke: #c17820;
+  stroke-width: 3;
+  stroke-dasharray: 300;
+  stroke-dashoffset: 300;
+  animation: drawCircle 0.7s ease-out forwards;
+}
+.check-tick {
+  fill: none;
+  stroke: #c17820;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: drawTick 0.4s 0.7s ease-out forwards;
+}
+
+/* Countdown ring — drains from full to empty over 30s */
+@keyframes countdownDrain {
+  from { stroke-dashoffset: 0; }
+  to { stroke-dashoffset: 283; }
+}
+.countdown-ring {
+  stroke-dasharray: 283;
+  stroke-dashoffset: 0;
+  animation: countdownDrain 30s linear forwards;
+}
+
+/* Order tracker — stepper icon animations */
+@keyframes chefWiggle {
+  0%, 100% { transform: rotate(-6deg); }
+  50% { transform: rotate(6deg); }
+}
+.icon-chef { display: inline-block; animation: chefWiggle 1.6s ease-in-out infinite; }
+
+@keyframes bellShake {
+  0%, 100% { transform: rotate(0); }
+  20% { transform: rotate(-18deg); }
+  40% { transform: rotate(15deg); }
+  60% { transform: rotate(-10deg); }
+  80% { transform: rotate(8deg); }
+}
+.icon-bell { display: inline-block; transform-origin: 50% 10%; animation: bellShake 1.4s ease-in-out infinite; }
+
+@keyframes sparkleGlow {
+  0%, 100% { filter: drop-shadow(0 0 6px rgba(193,120,32,0.6)); transform: scale(1); }
+  50% { filter: drop-shadow(0 0 18px rgba(226,176,102,0.9)); transform: scale(1.12); }
+}
+.icon-sparkle { display: inline-block; animation: sparkleGlow 1.8s ease-in-out infinite; }
+
+@keyframes hourglassPulse {
+  0%, 100% { opacity: 0.6; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+.icon-hourglass { display: inline-block; animation: hourglassPulse 1.5s ease-in-out infinite; }
+
+/* Confetti — pure CSS, falls top → bottom with rotation */
+@keyframes confettiFall {
+  0% { transform: translate3d(0, -10vh, 0) rotate(0deg); opacity: 0; }
+  10% { opacity: 1; }
+  100% { transform: translate3d(var(--drift, 0), 110vh, 0) rotate(var(--spin, 720deg)); opacity: 0; }
+}
+.confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 10px;
+  height: 16px;
+  border-radius: 2px;
+  will-change: transform, opacity;
+  animation-name: confettiFall;
+  animation-timing-function: linear;
+  animation-iteration-count: 1;
+  animation-fill-mode: forwards;
+  pointer-events: none;
+}
+
+/* Soft celebration title entrance */
+@keyframes celebrationPop {
+  0% { opacity: 0; transform: translateY(12px) scale(0.96); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+.celebration-title { animation: celebrationPop 0.5s 0.1s ease-out both; }
+
+/* QR scanner animated scan line */
+@keyframes scanSweep {
+  0% { transform: translateY(0); opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { transform: translateY(270px); opacity: 0.6; }
+}
+.scanline {
+  position: absolute;
+  left: 2rem;
+  right: 2rem;
+  top: 1.5rem;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #c17820, transparent);
+  box-shadow: 0 0 18px rgba(193, 120, 32, 0.55);
+  animation: scanSweep 2.4s ease-in-out infinite alternate;
+}
+
+/* Grain texture overlay */
+.grain::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.4;
+}
+
+/* Live rider pin pulse — used by RiderMap. */
+@keyframes rider-pulse {
+  0%   { transform: scale(0.6); opacity: 0.65; }
+  70%  { transform: scale(2.4); opacity: 0;    }
+  100% { transform: scale(2.4); opacity: 0;    }
+}

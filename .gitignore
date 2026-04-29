@@ -1,0 +1,40 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+# Added by code-review-graph
+.code-review-graph/
+
+# Local-only folder for staging menu item photos before bulk upload.
+# Run: npm run menu-images
+menu-images/
+
+# Local env vars — production keys live in Vercel + Supabase secrets.
+# Defensive: cover every common variation so a stray `git add .` can't
+# leak credentials.
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+*.env

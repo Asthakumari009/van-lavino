@@ -1,0 +1,19 @@
+project_id = "ffxejbvvxbutwkghpfvn"
+
+[functions.create-razorpay-order]
+verify_jwt = false
+
+[functions.invite-staff]
+# The function performs its own admin authorization (checks the caller's JWT
+# against the `staff` table), so the platform-level JWT gate is redundant
+# and was the source of spurious 401s at the gateway. Keep this off and
+# rely on the in-function admin check.
+verify_jwt = false
+
+[functions.ai-insights]
+# Same reasoning as invite-staff — manual admin verification inside.
+verify_jwt = false
+
+[functions.blog-sync]
+# Manual admin check + optional cron secret header inside.
+verify_jwt = false
