@@ -197,8 +197,7 @@ export default function OrderCheckout() {
       }
 
       // Online payment path: server-create the Razorpay order so we have a
-      // verifiable order_id, then open checkout. On success we persist with
-      // payment_status='paid'.
+      // verifiable order_id, then open checkout.
       const amountPaise = Math.round(total * 100);
       let rpOrder: { id: string; amount: number; currency: string } | null = null;
       try {
@@ -231,6 +230,34 @@ export default function OrderCheckout() {
         return;
       }
 
+      // Pre-persist the order BEFORE opening Razorpay. Two reasons:
+      //   1. Mobile UPI flow swaps to a UPI app and Razorpay redirects back
+      //      to `callback_url` (not the modal handler). The JS context that
+      //      held the cart + persistInput may be gone by then, so the only
+      //      way to recover the order on the success page is to have it
+      //      already in the DB, keyed by id in the callback URL.
+      //   2. Even on desktop, this means a successful payment never fails
+      //      to save — verify-razorpay-payment just flips the status.
+      let internalOrderId: string;
+      try {
+        internalOrderId = await persistOrder({
+          ...persistInput,
+          status: 'confirmed',
+          paymentStatus: 'unpaid',
+          paymentMethod: 'razorpay',
+          razorpayOrderId: rpOrder.id,
+        });
+      } catch (err) {
+        console.error('[checkout] pre-persist failed', err);
+        toast.error('Could not save your order. Please try again.');
+        placingRef.current = false;
+        setSubmitting(null);
+        return;
+      }
+      useCustomerAccess.getState().setLastOrderId(internalOrderId);
+
+      const successUrl = `${window.location.origin}/order-success?orderId=${encodeURIComponent(internalOrderId)}`;
+
       await initiatePayment({
         amount: rpOrder.amount,
         orderId: rpOrder.id,
@@ -238,32 +265,39 @@ export default function OrderCheckout() {
         description: isDelivery
           ? `Bakery delivery · ${branch?.name ?? 'Van Lavino'}`
           : `Bakery pickup · ${branch?.name ?? 'Van Lavino'}`,
+        callbackUrl: successUrl,
+        prefill: {
+          name: customer.name,
+          contact: customer.phone,
+        },
         onSuccess: async (resp) => {
+          // Desktop modal path. Verify on the server (best-effort —
+          // failure here just means staff has to reconcile manually,
+          // the order itself is already saved).
           try {
-            const orderId = await persistOrder({
-              ...persistInput,
-              status: 'confirmed',
-              paymentStatus: 'paid',
-              paymentMethod: 'razorpay',
-              razorpayOrderId: resp.razorpay_order_id,
-              razorpayPaymentId: resp.razorpay_payment_id,
+            await supabase.functions.invoke('verify-razorpay-payment', {
+              body: {
+                orderId: internalOrderId,
+                razorpay_order_id: resp.razorpay_order_id,
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_signature: resp.razorpay_signature,
+              },
             });
-            useCustomerAccess.getState().setLastOrderId(orderId);
-            toast.success('Payment received');
-            // Cart cleared on /order-success mount.
-            navigate('/order-success', { state: { orderId } });
           } catch (err) {
-            console.error(err);
-            toast.error(
-              'Payment succeeded but we failed to save the order. Please contact us with the payment id.'
-            );
-          } finally {
-            setSubmitting(null);
+            console.error('[verify-razorpay] desktop verify failed', err);
           }
+          toast.success('Payment received');
+          navigate('/order-success', { state: { orderId: internalOrderId } });
+          setSubmitting(null);
         },
         onFailure: () => {
+          // Modal dismissed without paying. The pre-persisted order stays
+          // as `unpaid` — staff can clean it up, or the customer can
+          // retry. Nothing to delete because RLS doesn't let customers
+          // remove orders, and we don't want to anyway (audit trail).
           placingRef.current = false;
           setSubmitting(null);
+          toast('Payment cancelled', { icon: 'ℹ️' });
         },
       });
     } catch (err) {

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { Download } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useCart } from '../lib/useCart';
@@ -12,6 +12,7 @@ const AUTO_REDIRECT_SECONDS = 30;
 export default function OrderSuccess() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const tableNumber = useCart((s) => s.tableNumber);
   const branchId = useCart((s) => s.branchId);
   const clearCart = useCart((s) => s.clearCart);
@@ -21,12 +22,22 @@ export default function OrderSuccess() {
   const [branch, setBranch] = useState<Branch | null>(null);
   const [downloading, setDownloading] = useState(false);
 
+  // Two ways to land here:
+  //   1. Desktop / dine-in modal flow → location.state.orderId
+  //   2. Mobile UPI redirect (Razorpay callback_url) → ?orderId=...
+  //      with razorpay_payment_id/order_id/signature also in the query.
+  // Either is sufficient; we trust the orderId either way and use it to
+  // load the order. The Razorpay params (when present) trigger a
+  // server-side verify that flips payment_status to 'paid'.
   const stateOrderId = (location.state as { orderId?: string } | null)?.orderId;
+  const urlOrderId = searchParams.get('orderId');
+  const orderIdResolved = stateOrderId ?? urlOrderId ?? null;
+
   const fallbackDisplayId = useMemo(
     () => `VL-${Date.now().toString(36).toUpperCase().slice(-6)}`,
     []
   );
-  const displayOrderId = order?.id ?? stateOrderId ?? fallbackDisplayId;
+  const displayOrderId = order?.id ?? orderIdResolved ?? fallbackDisplayId;
 
   // Fulfillment drives every channel-specific decision below: copy, return-CTA
   // target, and whether auto-redirect even makes sense (a bakery customer
@@ -49,19 +60,70 @@ export default function OrderSuccess() {
   // Drain the cart now that an order has been successfully placed. Done
   // here (instead of in OrderCheckout's submit handler) so that clearing
   // doesn't race the navigate to this page — see comment on placingRef in
-  // OrderCheckout.
+  // OrderCheckout. Also fires on the mobile redirect path (?orderId=...).
   useEffect(() => {
-    if (stateOrderId) clearCart();
-  }, [stateOrderId, clearCart]);
+    if (orderIdResolved) clearCart();
+  }, [orderIdResolved, clearCart]);
+
+  // If we landed here via the Razorpay callback_url (mobile UPI flow), the
+  // payment params are in the query string. Hand them to the server to
+  // HMAC-verify and flip the order to paid. Fire-and-forget on success;
+  // on failure just log — the order is already saved as 'unpaid' so staff
+  // can reconcile with Razorpay if the verify call fails.
+  const verifyFiredRef = useRef(false);
+  useEffect(() => {
+    if (verifyFiredRef.current) return;
+    if (!orderIdResolved) return;
+    const rpPaymentId = searchParams.get('razorpay_payment_id');
+    const rpOrderId = searchParams.get('razorpay_order_id');
+    const rpSignature = searchParams.get('razorpay_signature');
+    if (!rpPaymentId || !rpOrderId || !rpSignature) return;
+
+    verifyFiredRef.current = true;
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke<{
+          ok: boolean;
+          error?: string;
+        }>('verify-razorpay-payment', {
+          body: {
+            orderId: orderIdResolved,
+            razorpay_order_id: rpOrderId,
+            razorpay_payment_id: rpPaymentId,
+            razorpay_signature: rpSignature,
+          },
+        });
+        if (error || !data?.ok) {
+          console.error('[verify-razorpay] failed', error, data);
+        } else {
+          // Refresh the displayed order so payment_status shows 'paid'.
+          const { data: refreshed } = await supabase
+            .from('orders')
+            .select('*, order_items(*)')
+            .eq('id', orderIdResolved)
+            .maybeSingle();
+          if (refreshed) {
+            const { order_items, ...orderRow } = refreshed as OrderRow & {
+              order_items: OrderItemRow[];
+            };
+            setOrder(orderRow as OrderRow);
+            setItems(order_items ?? []);
+          }
+        }
+      } catch (err) {
+        console.error('[verify-razorpay] threw', err);
+      }
+    })();
+  }, [orderIdResolved, searchParams]);
 
   useEffect(() => {
-    if (!stateOrderId) return;
+    if (!orderIdResolved) return;
     let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from('orders')
         .select('*, order_items(*)')
-        .eq('id', stateOrderId)
+        .eq('id', orderIdResolved)
         .maybeSingle();
       if (cancelled || !data) return;
       const { order_items, ...orderRow } = data as OrderRow & {
@@ -73,7 +135,7 @@ export default function OrderSuccess() {
     return () => {
       cancelled = true;
     };
-  }, [stateOrderId]);
+  }, [orderIdResolved]);
 
   // Look up branch by id once the order arrives — receipt + bakery copy
   // both want the human-readable branch name.
@@ -169,9 +231,9 @@ export default function OrderSuccess() {
         </p>
 
         <div className="flex flex-col items-center gap-4 w-full">
-          {stateOrderId && (
+          {orderIdResolved && (
             <Link
-              to={`/track?order=${encodeURIComponent(stateOrderId)}`}
+              to={`/track?order=${encodeURIComponent(orderIdResolved)}`}
               className="w-full md:w-auto inline-flex items-center justify-center gap-2 bg-brand-500 text-ink px-8 py-4 rounded-full font-semibold tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300"
             >
               Track Your Order →
@@ -185,9 +247,9 @@ export default function OrderSuccess() {
             {returnLabel}
           </Link>
 
-          {stateOrderId && (
+          {orderIdResolved && (
             <Link
-              to={`/review?order=${encodeURIComponent(stateOrderId)}`}
+              to={`/review?order=${encodeURIComponent(orderIdResolved)}`}
               className="w-full md:w-auto inline-flex items-center justify-center gap-2 text-brand-600 hover:text-brand-500 px-4 py-2 text-xs uppercase tracking-[0.3em] font-mono transition"
             >
               ★ Leave a review

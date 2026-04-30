@@ -1210,48 +1210,79 @@ export default function Menu() {
         return;
       }
 
+      // Pre-persist the order BEFORE opening Razorpay. On mobile UPI flows
+      // Razorpay redirects to `callback_url` (the JS modal handler may
+      // never fire because the OS suspends the page while the user is in
+      // a UPI app). The order needs to already be in the DB so the
+      // success page can find it by id from the URL.
+      let internalOrderId: string;
+      try {
+        internalOrderId = await persistOrder({
+          branchId: branchParam,
+          tableId,
+          tableNumber: tableParam,
+          tableToken: tokenParam,
+          customerName: customer.name,
+          customerPhone: customer.phone,
+          customerSessionId: tableSession?.customerSessionId ?? null,
+          status: 'confirmed',
+          paymentStatus: 'unpaid',
+          paymentMethod: 'razorpay',
+          razorpayOrderId: rpOrder.id,
+          razorpayPaymentId: null,
+          subtotal: sub,
+          total,
+          note,
+          items: cartItems,
+        });
+      } catch (err) {
+        console.error(err);
+        toast.error('Could not save your order. Please try again.');
+        setSubmitting(null);
+        return;
+      }
+      useCustomerAccess.getState().setLastOrderId(internalOrderId);
+      setLatestActiveOrderId(internalOrderId);
+      setActiveOrderCount((n) => n + 1);
+
+      const successUrl = `${window.location.origin}/order-success?orderId=${encodeURIComponent(internalOrderId)}`;
+
       await initiatePayment({
         amount: rpOrder.amount,
         orderId: rpOrder.id,
         tableNumber: tableParam || '-',
         description: `Order · Table ${tableParam || '-'}`,
-        onSuccess: async (resp) => {
-          try {
-            const orderId = await persistOrder({
-              branchId: branchParam,
-              tableId,
-              tableNumber: tableParam,
-              tableToken: tokenParam,
-              customerName: customer.name,
-              customerPhone: customer.phone,
-              customerSessionId: tableSession?.customerSessionId ?? null,
-              status: 'confirmed',
-              paymentStatus: 'paid',
-              paymentMethod: 'razorpay',
-              razorpayOrderId: resp.razorpay_order_id,
-              razorpayPaymentId: resp.razorpay_payment_id,
-              subtotal: sub,
-              total,
-              note,
-              items: cartItems,
-            });
-            useCustomerAccess.getState().setLastOrderId(orderId);
-            setLatestActiveOrderId(orderId);
-            setActiveOrderCount((n) => n + 1);
-            toast.success('Payment received');
-            clearCart();
-            setCartOpen(false);
-            navigate('/order-success', { state: { orderId } });
-          } catch (err) {
-            console.error(err);
-            toast.error(
-              'Payment succeeded but we failed to save the order. Please show this screen to staff.'
-            );
-          } finally {
-            setSubmitting(null);
-          }
+        callbackUrl: successUrl,
+        prefill: {
+          name: customer.name,
+          contact: customer.phone,
         },
-        onFailure: () => setSubmitting(null),
+        onSuccess: async (resp) => {
+          // Desktop modal path. Verify on the server (best-effort —
+          // failure here just means staff has to reconcile manually,
+          // the order itself is already saved as 'unpaid').
+          try {
+            await supabase.functions.invoke('verify-razorpay-payment', {
+              body: {
+                orderId: internalOrderId,
+                razorpay_order_id: resp.razorpay_order_id,
+                razorpay_payment_id: resp.razorpay_payment_id,
+                razorpay_signature: resp.razorpay_signature,
+              },
+            });
+          } catch (err) {
+            console.error('[verify-razorpay] dine-in verify failed', err);
+          }
+          toast.success('Payment received');
+          clearCart();
+          setCartOpen(false);
+          navigate('/order-success', { state: { orderId: internalOrderId } });
+          setSubmitting(null);
+        },
+        onFailure: () => {
+          toast('Payment cancelled', { icon: 'ℹ️' });
+          setSubmitting(null);
+        },
       });
     } catch (err) {
       console.error(err);
