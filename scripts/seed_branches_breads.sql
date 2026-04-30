@@ -60,14 +60,23 @@ AND NOT EXISTS (
 -- Prices are placeholders — adjust in /admin → Menu Management once seeded.
 
 WITH bread_skus (sku_name, sku_desc, sku_price, sku_veg) AS (VALUES
-  ('Pav Bun',         'Soft fluffy Bombay-style bun, baked daily — pack of 6',                 40, true),
-  ('Burger Bun',      'Brioche-style burger buns with a tender crumb — pack of 4',             50, true),
-  ('Brown Bread',     'Whole-wheat sandwich loaf, lightly sweetened, no preservatives',        95, true),
-  ('Dark Multigrain', 'Five-grain loaf with flax, oats and sunflower seeds',                  120, true),
-  ('Bagels',          'Hand-shaped, kettle-boiled bagels — pack of 4 (plain)',                120, true),
-  ('Baguette',        'Crisp-crust French baguette, baked twice daily',                       150, true),
-  ('Focaccia Bread',  'Olive-oil focaccia with sea salt and rosemary',                        180, true),
-  ('Sourdough Loaf',  '36-hour fermented country sourdough, stone-baked',                     220, true)
+  ('Pav Bun',                    'Soft fluffy Bombay-style bun, baked daily — pack of 6',           40, true),
+  ('Burger Bun',                 'Brioche-style burger buns with a tender crumb — pack of 4',       50, true),
+  ('Mini Burger',                'Mini slider buns, soft and golden — pack of 8',                   60, true),
+  ('Plain White Bread',          'Classic white sandwich loaf, soft crumb',                         70, true),
+  ('Pitta Bread',                'Middle Eastern flatbread, hand-stretched — pack of 6',            80, true),
+  ('Garlic Bread',               'Buttered baguette slices with roasted garlic and herbs',          90, true),
+  ('Brown Bread',                'Whole-wheat sandwich loaf, lightly sweetened, no preservatives',  95, true),
+  ('Pizza Base',                 'Hand-stretched pizza base, par-baked — pack of 2',               100, true),
+  ('White Multigrain Bread',     'White-flour multigrain loaf with oats and seeds',                110, true),
+  ('Dark Multigrain',            'Five-grain loaf with flax, oats and sunflower seeds',            120, true),
+  ('Bagels',                     'Hand-shaped, kettle-boiled bagels — pack of 4 (plain)',          120, true),
+  ('Soft Milk Bread',            'Japanese-style shokupan, pillowy and lightly sweet',             130, true),
+  ('Baguette',                   'Crisp-crust French baguette, baked twice daily',                 150, true),
+  ('Nutella Croissants',         'All-butter croissants filled with Nutella — pack of 4',          150, false),
+  ('Focaccia Bread',             'Olive-oil focaccia with sea salt and rosemary',                  180, true),
+  ('Sun-dried Tomato Focaccia',  'Focaccia studded with sun-dried tomatoes and olive oil',         220, true),
+  ('Sourdough Loaf',             '36-hour fermented country sourdough, stone-baked',               220, true)
 )
 INSERT INTO menu_items (
   branch_id, category_id, name, description, price, is_veg, is_available, is_deliverable
@@ -103,8 +112,10 @@ UPDATE menu_items
 SET is_deliverable = true
 WHERE is_deliverable = false
   AND name IN (
-    'Pav Bun','Burger Bun','Brown Bread','Dark Multigrain',
-    'Bagels','Baguette','Focaccia Bread','Sourdough Loaf'
+    'Pav Bun','Burger Bun','Mini Burger','Plain White Bread','Pitta Bread',
+    'Garlic Bread','Brown Bread','Pizza Base','White Multigrain Bread',
+    'Dark Multigrain','Bagels','Soft Milk Bread','Baguette','Nutella Croissants',
+    'Focaccia Bread','Sun-dried Tomato Focaccia','Sourdough Loaf'
   );
 
 COMMIT;
