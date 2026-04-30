@@ -214,21 +214,53 @@ export default function Login() {
     setError(false);
     setSubmitting(true);
 
-    // 10s ceiling on challengeAndVerify itself — supabase has been seen
-    // to hang on flaky mobile networks and we never want the button to
-    // sit on "Verifying…" indefinitely.
-    let verifyErr: { message?: string } | null = null;
-    try {
-      const verifyResult = (await Promise.race([
-        supabase.auth.mfa.challengeAndVerify({ factorId, code }),
-        new Promise((resolve) =>
-          setTimeout(
-            () => resolve({ error: { message: 'Verify timed out — try again' } }),
-            10_000
-          )
+    // Two stages, each with its own 8s ceiling. challengeAndVerify
+    // wraps challenge + verify in one round-trip; we split them so a
+    // hang in either phase surfaces faster, and so the verify call
+    // itself can be retried independently if the challenge succeeded.
+    const TIMEOUT_SENTINEL = '__TIMEOUT__';
+    async function withTimeout<T>(
+      promise: Promise<T>,
+      ms: number
+    ): Promise<T | typeof TIMEOUT_SENTINEL> {
+      return Promise.race([
+        promise,
+        new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
+          setTimeout(() => resolve(TIMEOUT_SENTINEL), ms)
         ),
-      ])) as { error: { message?: string } | null };
-      verifyErr = verifyResult.error ?? null;
+      ]);
+    }
+
+    let verifyErr: { message?: string } | null = null;
+    let timedOut = false;
+    try {
+      const challengeRes = await withTimeout(
+        supabase.auth.mfa.challenge({ factorId }),
+        15_000
+      );
+      if (challengeRes === TIMEOUT_SENTINEL) {
+        timedOut = true;
+        verifyErr = { message: 'Verify timed out — clearing session and reloading' };
+      } else if (challengeRes.error || !challengeRes.data?.id) {
+        verifyErr = {
+          message: challengeRes.error?.message ?? 'Could not start MFA challenge',
+        };
+      } else {
+        const verifyRes = await withTimeout(
+          supabase.auth.mfa.verify({
+            factorId,
+            challengeId: challengeRes.data.id,
+            code,
+          }),
+          15_000
+        );
+        if (verifyRes === TIMEOUT_SENTINEL) {
+          timedOut = true;
+          verifyErr = { message: 'Verify timed out — clearing session and reloading' };
+        } else if (verifyRes.error) {
+          verifyErr = { message: verifyRes.error.message ?? 'Verify failed' };
+        }
+      }
     } catch (err) {
       verifyErr = {
         message: err instanceof Error ? err.message : 'Verify failed',
@@ -240,6 +272,33 @@ export default function Login() {
       setError(true);
       setCode('');
       toast.error(verifyErr.message || 'Code did not match');
+      // Self-heal on timeout: a hang almost always means the local
+      // session is in a half-elevated state that won't recover. Wipe
+      // every supabase auth key, unregister any leftover SW, and hard-
+      // reload to /login so the next attempt starts clean.
+      if (timedOut) {
+        setTimeout(() => {
+          try {
+            Object.keys(localStorage)
+              .filter((k) => k.startsWith('sb-'))
+              .forEach((k) => localStorage.removeItem(k));
+          } catch {
+            /* private mode */
+          }
+          try {
+            if ('serviceWorker' in navigator) {
+              navigator.serviceWorker
+                .getRegistrations()
+                .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+                .finally(() => window.location.replace('/login'));
+              return;
+            }
+          } catch {
+            /* fall through */
+          }
+          window.location.replace('/login');
+        }, 1200);
+      }
       return;
     }
 
@@ -271,6 +330,39 @@ export default function Login() {
     setCode('');
     setPassword('');
     toast('Signed out · sign in again to retry');
+  }
+
+  // Last-resort escape hatch. If the page is in any weird state — old
+  // SW still intercepting, half-elevated session, you-name-it — this
+  // button wipes localStorage + every cache + every SW and reloads to
+  // a clean /login. Should never normally be needed, but it's there.
+  function forceReset() {
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') || k.startsWith('vanlavino:'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* noop */
+    }
+    try {
+      sessionStorage.clear();
+    } catch {
+      /* noop */
+    }
+    const reload = () => window.location.replace('/login');
+    const swDone = ('serviceWorker' in navigator)
+      ? navigator.serviceWorker
+          .getRegistrations()
+          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+          .catch(() => {})
+      : Promise.resolve();
+    const cachesDone = (typeof caches !== 'undefined')
+      ? caches
+          .keys()
+          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+          .catch(() => {})
+      : Promise.resolve();
+    Promise.allSettled([swDone, cachesDone]).finally(reload);
   }
 
   const inputBase =
@@ -400,6 +492,17 @@ export default function Login() {
             </button>
           </form>
         )}
+
+        {/* Always-visible escape hatch. If the page is genuinely stuck
+            — old SW intercepting requests, half-elevated session — this
+            wipes everything and reloads. */}
+        <button
+          type="button"
+          onClick={forceReset}
+          className="block mx-auto mt-6 font-mono text-[10px] tracking-[0.25em] uppercase text-cream/45 hover:text-amber-400 transition-colors"
+        >
+          Stuck? Reset session &amp; reload
+        </button>
       </div>
     </div>
   );
