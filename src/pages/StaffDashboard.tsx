@@ -226,12 +226,15 @@ function LiveOrders({ branchId }: { branchId: string }) {
       .eq('branch_id', branchId)
       .in('status', ACTIVE_STATUSES)
       .order('created_at', { ascending: false });
+    // Always lift the loading state, even on error — otherwise a transient
+    // error on the first fetch leaves the kanban stuck on "Loading…" until
+    // a manual refresh.
+    setLoading(false);
     if (error) {
       toast.error(error.message);
       return;
     }
     setOrders((data ?? []) as OrderWithItems[]);
-    setLoading(false);
   }, [branchId]);
 
   useEffect(() => {
@@ -311,11 +314,23 @@ function LiveOrders({ branchId }: { branchId: string }) {
   const advance = async (order: OrderWithItems) => {
     const next = NEXT_ACTION[order.status]?.next;
     if (!next) return;
+    // Optimistic: move the card to the next column immediately so the
+    // operator sees their click landed. Realtime fetchActive() will
+    // reconcile in ~1s; if the DB update fails we roll back below.
+    const previousStatus = order.status;
+    setOrders((prev) =>
+      prev.map((o) => (o.id === order.id ? { ...o, status: next } : o))
+    );
     const { error } = await supabase
       .from('orders')
       .update({ status: next })
       .eq('id', order.id);
     if (error) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id ? { ...o, status: previousStatus } : o
+        )
+      );
       toast.error(error.message);
       return;
     }
@@ -1496,12 +1511,24 @@ function KitchenDisplay({ branchId }: { branchId: string }) {
   }, [fetchOrders]);
 
   const advance = async (order: OrderWithItems, next: OrderStatus) => {
+    const previousStatus = order.status;
+    setOrders((prev) =>
+      prev.map((o) => (o.id === order.id ? { ...o, status: next } : o))
+    );
     const { error } = await supabase
       .from('orders')
       .update({ status: next })
       .eq('id', order.id);
-    if (error) toast.error(error.message);
-    else toast.success(`#${order.id.slice(-6).toUpperCase()} → ${next}`);
+    if (error) {
+      setOrders((prev) =>
+        prev.map((o) =>
+          o.id === order.id ? { ...o, status: previousStatus } : o
+        )
+      );
+      toast.error(error.message);
+    } else {
+      toast.success(`#${order.id.slice(-6).toUpperCase()} → ${next}`);
+    }
   };
 
   return (

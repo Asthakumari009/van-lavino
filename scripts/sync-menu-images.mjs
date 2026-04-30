@@ -133,22 +133,29 @@ async function main() {
     process.exit(0);
   }
 
-  // Build a slug → item map
+  // Build slug → [items]. The same SKU name (e.g. "Burger Bun") can exist
+  // once per branch — we want to wire image_url on every matching row so
+  // the photo shows up on every branch's menu, not just one.
   const bySlug = new Map();
-  for (const it of items) bySlug.set(slugify(it.name), it);
+  for (const it of items) {
+    const slug = slugify(it.name);
+    const arr = bySlug.get(slug) ?? [];
+    arr.push(it);
+    bySlug.set(slug, arr);
+  }
 
   console.log(`\n🍽  ${items.length} menu items in DB`);
   console.log(`📂  ${files.length} candidate image files in ${IMAGES_DIR}\n`);
 
   const report = { uploaded: 0, matched: 0, unmatched: [], failed: [] };
 
-  // 3. For each file, match → upload → update row
+  // 3. For each file, match → upload → update every row that shares the slug
   for (const filename of files) {
     const ext = extname(filename).toLowerCase();
     const slug = slugify(filename.slice(0, filename.length - ext.length));
-    const item = bySlug.get(slug);
+    const matches = bySlug.get(slug);
 
-    if (!item) {
+    if (!matches || matches.length === 0) {
       report.unmatched.push(filename);
       console.log(`✖  ${filename}  →  no menu item with slug "${slug}"`);
       continue;
@@ -169,15 +176,17 @@ async function main() {
       const { data: pub } = admin.storage.from(BUCKET).getPublicUrl(targetPath);
       const publicUrl = pub.publicUrl;
 
+      const ids = matches.map((m) => m.id);
       const { error: updErr } = await admin
         .from('menu_items')
         .update({ image_url: publicUrl })
-        .eq('id', item.id);
+        .in('id', ids);
       if (updErr) throw updErr;
 
       report.uploaded += 1;
-      report.matched += 1;
-      console.log(`✓  ${filename}  →  ${item.name}`);
+      report.matched += matches.length;
+      const suffix = matches.length > 1 ? `  (×${matches.length} branches)` : '';
+      console.log(`✓  ${filename}  →  ${matches[0].name}${suffix}`);
     } catch (err) {
       report.failed.push({ filename, msg: err.message ?? String(err) });
       console.log(`✖  ${filename}  →  ${err.message ?? err}`);

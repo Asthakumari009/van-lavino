@@ -928,14 +928,28 @@ export default function Menu() {
     let cancelled = false;
     setLoading(true);
     setLoadError(null);
+    // Watchdog: if the supabase query never resolves (slow first
+    // connection / WebSocket warmup on mobile) the skeleton would sit
+    // forever. After 12s, surface an error so the user can retry by
+    // refreshing instead of staring at a shimmering placeholder.
+    const watchdog = setTimeout(() => {
+      if (cancelled) return;
+      setLoading(false);
+      setLoadError('Menu took too long to load. Please refresh.');
+    }, 12_000);
     (async () => {
+      // Bakery SKUs (is_deliverable = true) live in their own /order
+      // channel — exclude them from the dine-in QR menu so the table
+      // experience stays focused on prepared dishes.
       const { data, error } = await supabase
         .from('menu_items')
         .select('*, categories(name, display_order)')
         .eq('branch_id', branchParam)
         .eq('is_available', true)
+        .eq('is_deliverable', false)
         .order('created_at', { ascending: true });
       if (cancelled) return;
+      clearTimeout(watchdog);
       if (error) {
         setLoadError(error.message);
       } else {
@@ -945,6 +959,7 @@ export default function Menu() {
     })();
     return () => {
       cancelled = true;
+      clearTimeout(watchdog);
     };
   }, [branchParam]);
 

@@ -136,6 +136,13 @@ export default function Login() {
   // (likely — the password sign-in fired the auth listener seconds ago)
   // we route immediately without any further network calls. Falls back
   // to a direct staff fetch only if the store is empty.
+  //
+  // We use a hard navigation (window.location.assign) instead of
+  // react-router's navigate because the auth listener fires on its own
+  // schedule and can race the optimistic AAL setState — that race was
+  // leaving users stuck on "Verifying…" until they manually refreshed.
+  // A full reload re-runs initialize() against the post-MFA session and
+  // ProtectedRoute renders the dashboard with no race.
   async function resolveStaffAndRoute(
     successMsg: string
   ): Promise<{ ok: boolean; target?: string }> {
@@ -148,7 +155,7 @@ export default function Login() {
         return { ok: false };
       }
       toast.success(successMsg);
-      navigate(target, { replace: true });
+      window.location.assign(target);
       return { ok: true, target };
     }
 
@@ -172,7 +179,7 @@ export default function Login() {
       return { ok: false };
     }
     toast.success(successMsg);
-    navigate(target, { replace: true });
+    window.location.assign(target);
     return { ok: true, target };
   }
 

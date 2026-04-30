@@ -1481,7 +1481,14 @@ function TableQrCard({
   table: RestaurantTable;
   branchId: string;
 }) {
-  const url = `https://vanlavino.com/scan?branch=${branchId}&table=${encodeURIComponent(
+  // Use the current deployment's origin so the QR points at whichever
+  // host the admin printed it from — production, preview, or local.
+  // Falls back to the Vercel canonical URL for SSR/build time.
+  const origin =
+    typeof window !== 'undefined' && window.location.origin
+      ? window.location.origin
+      : 'https://van-lavino.vercel.app';
+  const url = `${origin}/scan?branch=${branchId}&table=${encodeURIComponent(
     table.table_number
   )}&token=${encodeURIComponent(table.qr_token)}`;
   const svgRef = useRef<HTMLDivElement | null>(null);
