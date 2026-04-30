@@ -159,13 +159,22 @@ export default function AdminDashboard() {
     branchName,
   };
 
-  const onSignOut = async () => {
-    // Hard redirect — see StaffDashboard for the rationale. supabase
-    // signOut occasionally hangs on a slow network and was making this
-    // button feel unresponsive.
-    void signOut().catch(() => {
-      /* server-side token timeout will catch us up; local store is wiped */
-    });
+  const onSignOut = () => {
+    // Synchronously wipe Supabase's auth tokens from localStorage so
+    // /login boots into an unauthenticated state. Without this,
+    // initialize() on /login still finds a cached session and
+    // Login.tsx's useEffect bounces the admin right back to /admin —
+    // which presents as "I keep clicking sign out and it just goes
+    // back to the dashboard". signOut() runs in the background to
+    // invalidate the token server-side; we don't await.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') && k.endsWith('-auth-token'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* private mode etc. */
+    }
+    void signOut().catch(() => {});
     window.location.replace('/login');
   };
 

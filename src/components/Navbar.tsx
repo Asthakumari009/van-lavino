@@ -6,10 +6,13 @@ import { useCustomerAccess } from '../lib/useCustomerAccess';
 import type { OrderStatus } from '../types';
 
 // Hash-based in-page anchors; Blog is a real route and is handled separately.
-const LINKS: { label: string; hash: string }[] = [
-  { label: 'Menu', hash: '#menu' },
-  { label: 'About', hash: '#about' },
-  { label: 'Contact', hash: '#contact' },
+// "Menu" used to be a hash anchor to the Landing's menu showcase, but
+// customers wanted to browse the full menu before visiting — it's now a
+// real route at /menu that works without a table session.
+const LINKS: { label: string; href: string; hash?: string }[] = [
+  { label: 'Menu', href: '/menu' },
+  { label: 'About', href: '#about', hash: '#about' },
+  { label: 'Contact', href: '#contact', hash: '#contact' },
 ];
 
 export default function Navbar() {
@@ -73,8 +76,11 @@ export default function Navbar() {
   }, []);
 
   // Scrollspy: whichever section is in view marks the matching link active.
+  // Only the hash-anchor links participate; real-route links (e.g. /menu)
+  // don't have a corresponding section on this page.
   useEffect(() => {
-    const ids = LINKS.map((l) => l.hash.slice(1));
+    const ids = LINKS.filter((l) => l.hash)
+      .map((l) => l.hash!.slice(1));
     const els = ids
       .map((id) => document.getElementById(id))
       .filter((el): el is HTMLElement => !!el);
@@ -121,20 +127,32 @@ export default function Navbar() {
 
           <div className="hidden md:flex items-center gap-10">
             {LINKS.map((l) => {
-              const isActive = active === l.hash;
+              const isActive = !!l.hash && active === l.hash;
+              const className =
+                'relative text-xs uppercase tracking-[0.25em] text-cream/80 hover:text-brand-600 transition-colors';
+              const underline = (
+                <span
+                  className={`absolute -bottom-1 left-0 h-[1px] bg-brand-500 transition-all duration-300 ${
+                    isActive ? 'w-full' : 'w-0'
+                  }`}
+                />
+              );
+              // Hash anchors stay as <a href="#…"> so the browser's native
+              // smooth-scroll/scroll-spy behaviour kicks in. Real routes
+              // use react-router <Link> so we get SPA navigation.
+              if (l.hash) {
+                return (
+                  <a key={l.label} href={l.href} className={className}>
+                    {l.label}
+                    {underline}
+                  </a>
+                );
+              }
               return (
-                <a
-                  key={l.label}
-                  href={l.hash}
-                  className="relative text-xs uppercase tracking-[0.25em] text-cream/80 hover:text-brand-600 transition-colors"
-                >
+                <Link key={l.label} to={l.href} className={className}>
                   {l.label}
-                  <span
-                    className={`absolute -bottom-1 left-0 h-[1px] bg-brand-500 transition-all duration-300 ${
-                      isActive ? 'w-full' : 'w-0'
-                    }`}
-                  />
-                </a>
+                  {underline}
+                </Link>
               );
             })}
             <Link
@@ -205,20 +223,33 @@ export default function Navbar() {
         </div>
         <nav className="flex flex-col p-4 gap-1">
           {LINKS.map((l) => {
-            const isActive = active === l.hash;
+            const isActive = !!l.hash && active === l.hash;
+            const className = `block px-4 py-3 rounded-xl text-sm uppercase tracking-[0.25em] transition-all ${
+              isActive
+                ? 'bg-brand-500/15 text-brand-600 border border-brand-500/30'
+                : 'text-cream/80 hover:text-brand-600 border border-transparent'
+            }`;
+            if (l.hash) {
+              return (
+                <a
+                  key={l.label}
+                  href={l.href}
+                  onClick={() => setDrawerOpen(false)}
+                  className={className}
+                >
+                  {l.label}
+                </a>
+              );
+            }
             return (
-              <a
+              <Link
                 key={l.label}
-                href={l.hash}
+                to={l.href}
                 onClick={() => setDrawerOpen(false)}
-                className={`block px-4 py-3 rounded-xl text-sm uppercase tracking-[0.25em] transition-all ${
-                  isActive
-                    ? 'bg-brand-500/15 text-brand-600 border border-brand-500/30'
-                    : 'text-cream/80 hover:text-brand-600 border border-transparent'
-                }`}
+                className={className}
               >
                 {l.label}
-              </a>
+              </Link>
             );
           })}
           <Link

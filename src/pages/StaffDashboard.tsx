@@ -70,18 +70,27 @@ export default function StaffDashboard() {
     );
   }
 
-  const onSignOut = async () => {
-    // Fire signOut in the background. We do NOT await it before
-    // redirecting — supabase.auth.signOut() occasionally hangs on a slow
-    // network and was leaving the sidebar button feeling unresponsive
-    // (the user would click 2–3 times and then refresh). The
-    // window.location.replace below tears down the page regardless;
-    // initialize() on the freshly-loaded /login picks up the cleared
-    // session.
+  const onSignOut = () => {
+    // Two-step:
+    //   1. Synchronously wipe Supabase's auth tokens from localStorage so
+    //      /login boots into an unauthenticated state. Without this,
+    //      supabase.auth.getSession() on the next page load happily
+    //      returns the still-cached session and Login.tsx's useEffect
+    //      bounces the user right back to /staff — which is exactly what
+    //      "click sign out and it just keeps redirecting to dashboard"
+    //      looks like.
+    //   2. Fire the server-side signOut in the background and hard-
+    //      redirect. We don't await — a slow signOut() should never
+    //      block the redirect.
+    try {
+      Object.keys(localStorage)
+        .filter((k) => k.startsWith('sb-') && k.endsWith('-auth-token'))
+        .forEach((k) => localStorage.removeItem(k));
+    } catch {
+      /* private mode etc. — fine, signOut() below still tries server-side */
+    }
     void signOut().catch(() => {
-      /* network error during signOut isn't fatal — the local session is
-       * already wiped by the store's set, and the server will time the
-       * token out on its own. */
+      /* network error: server token will time out on its own */
     });
     window.location.replace('/login');
   };

@@ -92,14 +92,6 @@ function CustomerAuthRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
-function TableSessionRoute({ children }: { children: ReactNode }) {
-  const isCustomerActive = useCustomerAccess((s) => s.isCustomerActive);
-  const isTableSessionActive = useCustomerAccess((s) => s.isTableSessionActive);
-  if (!isCustomerActive()) return <Navigate to="/customer-auth" replace />;
-  if (!isTableSessionActive()) return <Navigate to="/scan" replace />;
-  return <>{children}</>;
-}
-
 // Wraps the current route in a keyed <div> so navigation triggers a fresh
 // CSS fade-in. Remounts the page — intentional; routes are treated as
 // disposable on navigation.
@@ -126,14 +118,10 @@ function AppRoutes() {
             </CustomerAuthRoute>
           }
         />
-        <Route
-          path="/menu"
-          element={
-            <TableSessionRoute>
-              <Menu />
-            </TableSessionRoute>
-          }
-        />
+        {/* /menu is publicly browseable — customers wanted to see the
+            menu before visiting. Ordering gates re-engage inside Menu:
+            without a table session, "Add" sends the user to /scan. */}
+        <Route path="/menu" element={<Menu />} />
         <Route
           path="/customer"
           element={

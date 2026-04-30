@@ -7,6 +7,7 @@ import Spinner from '../components/Spinner';
 import { supabase } from '../lib/supabase';
 import { useCart } from '../lib/useCart';
 import { useCustomerAccess } from '../lib/useCustomerAccess';
+import type { Branch, RestaurantTable } from '../types';
 
 type ValidationResult = {
   branchId: string;
@@ -25,9 +26,18 @@ export default function ScanQR() {
   const setTableSession = useCustomerAccess((s) => s.setTableSession);
 
   const [cameraOpen, setCameraOpen] = useState(false);
-  const [manualUrl, setManualUrl] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [permissionDenied, setPermissionDenied] = useState(false);
+
+  // Manual branch + table picker — fallback for damaged / missing QR
+  // codes. Populated from public reads of `branches` and
+  // `restaurant_tables`. We resolve qr_token from the chosen table
+  // before calling verifyAndContinue.
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [tables, setTables] = useState<RestaurantTable[]>([]);
+  const [selectedBranchId, setSelectedBranchId] = useState('');
+  const [selectedTableId, setSelectedTableId] = useState('');
+  const [manualSubmitting, setManualSubmitting] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const scannerRef = useRef<QrScanner | null>(null);
@@ -37,6 +47,46 @@ export default function ScanQR() {
       navigate('/customer-auth', { replace: true });
     }
   }, [isCustomerActive, navigate]);
+
+  // Load branches once for the manual fallback dropdown.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('branches')
+        .select('*')
+        .eq('is_active', true)
+        .order('name', { ascending: true });
+      if (!cancelled && data) setBranches(data as Branch[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Load tables for the chosen branch.
+  useEffect(() => {
+    if (!selectedBranchId) {
+      setTables([]);
+      setSelectedTableId('');
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('restaurant_tables')
+        .select('*')
+        .eq('branch_id', selectedBranchId)
+        .order('table_number', { ascending: true });
+      if (!cancelled && data) {
+        setTables(data as RestaurantTable[]);
+        setSelectedTableId('');
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBranchId]);
 
   useEffect(() => {
     const branch = searchParams.get('branch') ?? '';
@@ -126,7 +176,25 @@ export default function ScanQR() {
 
   const onManualSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await handleScannedText(manualUrl);
+    const table = tables.find((t) => t.id === selectedTableId);
+    if (!selectedBranchId || !table) {
+      toast.error('Pick a branch and table first');
+      return;
+    }
+    if (!table.qr_token) {
+      toast.error('This table has no QR token configured. Ask staff for help.');
+      return;
+    }
+    setManualSubmitting(true);
+    try {
+      await verifyAndContinue({
+        branch: selectedBranchId,
+        table: table.table_number,
+        token: table.qr_token,
+      });
+    } finally {
+      setManualSubmitting(false);
+    }
   };
 
   return (
@@ -163,31 +231,86 @@ export default function ScanQR() {
               <video ref={videoRef} className="w-full h-[320px] object-cover rounded-xl" muted playsInline />
               {permissionDenied && (
                 <p className="text-amber-300 text-sm mt-3">
-                  Camera access denied. Allow camera permission or paste QR link below.
+                  Camera access denied. Use the manual picker below.
                 </p>
               )}
             </div>
           )}
 
-          <form onSubmit={onManualSubmit} className="mt-5">
-            <label className="block font-mono text-[11px] uppercase tracking-[0.3em] text-brand-500 mb-2">
-              Paste QR Link
-            </label>
-            <div className="flex gap-2">
-              <input
-                value={manualUrl}
-                onChange={(e) => setManualUrl(e.target.value)}
-                placeholder="https://vanlavino.com/scan?branch=...&table=T1&token=..."
-                className="flex-1 bg-obsidian border border-brand-500/20 rounded-xl px-4 py-3 text-cream placeholder:text-cream/45 focus:outline-none focus:border-brand-500"
-              />
-              <button
-                type="submit"
-                disabled={verifying}
-                className="px-5 rounded-xl border border-brand-500/40 text-brand-500 hover:bg-brand-500 hover:text-ink transition-all"
+          <div className="mt-6 flex items-center gap-3">
+            <span className="flex-1 h-px bg-brand-500/15" />
+            <span className="font-mono text-[10px] uppercase tracking-[0.3em] text-cream/60">
+              Or pick manually
+            </span>
+            <span className="flex-1 h-px bg-brand-500/15" />
+          </div>
+
+          <form onSubmit={onManualSubmit} className="mt-4 space-y-4">
+            <p className="text-cream/65 text-sm leading-relaxed">
+              QR torn or hard to read? Pick your branch and table from the
+              list — staff will see your order on the same kanban as a
+              scanned one.
+            </p>
+
+            <div>
+              <label className="block font-mono text-[11px] uppercase tracking-[0.3em] text-brand-500 mb-2">
+                Branch
+              </label>
+              <select
+                value={selectedBranchId}
+                onChange={(e) => setSelectedBranchId(e.target.value)}
+                className="w-full bg-obsidian border border-brand-500/20 rounded-xl px-4 py-3 text-cream focus:outline-none focus:border-brand-500"
               >
-                {verifying ? <Spinner /> : 'Verify'}
-              </button>
+                <option value="">Select a branch…</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>
+                    {b.name}
+                    {b.city ? ` · ${b.city}` : ''}
+                  </option>
+                ))}
+              </select>
             </div>
+
+            <div>
+              <label className="block font-mono text-[11px] uppercase tracking-[0.3em] text-brand-500 mb-2">
+                Table
+              </label>
+              <select
+                value={selectedTableId}
+                onChange={(e) => setSelectedTableId(e.target.value)}
+                disabled={!selectedBranchId || tables.length === 0}
+                className="w-full bg-obsidian border border-brand-500/20 rounded-xl px-4 py-3 text-cream focus:outline-none focus:border-brand-500 disabled:opacity-50"
+              >
+                <option value="">
+                  {selectedBranchId
+                    ? tables.length === 0
+                      ? 'No tables configured…'
+                      : 'Select your table…'
+                    : 'Pick a branch first'}
+                </option>
+                {tables.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    Table {t.table_number}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <button
+              type="submit"
+              disabled={
+                manualSubmitting ||
+                verifying ||
+                !selectedBranchId ||
+                !selectedTableId
+              }
+              className="w-full inline-flex items-center justify-center gap-2 rounded-2xl border border-brand-500/40 text-brand-500 px-5 py-3 hover:bg-brand-500 hover:text-ink transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {manualSubmitting || verifying ? <Spinner /> : null}
+              {manualSubmitting || verifying
+                ? 'Connecting to your table…'
+                : 'Continue to menu →'}
+            </button>
           </form>
 
           <div className="mt-6 flex items-center justify-center gap-2 text-cream/60 text-sm">

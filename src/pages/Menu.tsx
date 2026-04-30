@@ -471,7 +471,18 @@ function CategoryTabs({
 
 // ---------- menu item card ----------
 
-function ItemCard({ item }: { item: MenuItem }) {
+function ItemCard({
+  item,
+  browseMode,
+  onBrowseAdd,
+}: {
+  item: MenuItem;
+  /** True when the page is in public-browse mode (no table session). */
+  browseMode?: boolean;
+  /** Called instead of addItem when in browseMode — usually routes the
+   *  customer to /scan so they can start a table session. */
+  onBrowseAdd?: () => void;
+}) {
   const quantity =
     useCart((s) => s.items.find((i) => i.id === item.id)?.quantity) ?? 0;
   const addItem = useCart((s) => s.addItem);
@@ -479,6 +490,10 @@ function ItemCard({ item }: { item: MenuItem }) {
   const [pulse, setPulse] = useState(false);
 
   const onAdd = () => {
+    if (browseMode) {
+      onBrowseAdd?.();
+      return;
+    }
     addItem({
       id: item.id,
       name: item.name,
@@ -903,8 +918,36 @@ export default function Menu() {
   const [search, setSearch] = useState('');
   const kitchenOpen = useKitchenStatus();
 
+  // Browse mode: customer hit /menu from the marketing nav with no table
+  // session and no QR-derived URL params. We still want to show them a
+  // menu (so they can decide to visit), but ordering must be gated on a
+  // real table — Add buttons route them to /scan instead of mutating the
+  // cart, and we fall back to the first active branch for display.
+  const isBrowseMode =
+    !tableSession && !branchParamFromUrl && !tokenParamFromUrl;
+
+  const [fallbackBranchId, setFallbackBranchId] = useState<string>('');
+  useEffect(() => {
+    if (!isBrowseMode) return;
+    let cancelled = false;
+    (async () => {
+      const { data } = await supabase
+        .from('branches')
+        .select('id')
+        .eq('is_active', true)
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      if (data?.id) setFallbackBranchId(data.id);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isBrowseMode]);
+
   const branchParam =
-    tableSession?.branchId || branchParamFromUrl;
+    tableSession?.branchId || branchParamFromUrl || fallbackBranchId;
   const tableParam =
     tableSession?.tableNumber || tableParamFromUrl;
   const tokenParam = tableSession?.token || tokenParamFromUrl;
@@ -921,6 +964,10 @@ export default function Menu() {
   // Load menu items
   useEffect(() => {
     if (!branchParam) {
+      // In browse mode we're waiting for fallbackBranchId to land —
+      // keep the skeleton up rather than flashing a "missing branch"
+      // error that will instantly resolve itself.
+      if (isBrowseMode) return;
       setLoading(false);
       setLoadError('Missing branch. Please scan your table QR code.');
       return;
@@ -1301,7 +1348,18 @@ export default function Menu() {
                   </h2>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
                     {g.items.map((item) => (
-                      <ItemCard key={item.id} item={item} />
+                      <ItemCard
+                        key={item.id}
+                        item={item}
+                        browseMode={isBrowseMode}
+                        onBrowseAdd={() => {
+                          toast(
+                            'Scan your table QR to start ordering',
+                            { icon: '📷' }
+                          );
+                          navigate('/scan');
+                        }}
+                      />
                     ))}
                   </div>
                 </section>
