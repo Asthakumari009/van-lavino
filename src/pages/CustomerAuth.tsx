@@ -118,7 +118,7 @@ export default function CustomerAuth() {
   };
 
   return (
-    <div className="min-h-screen bg-obsidian text-cream relative overflow-hidden px-6 py-12 flex items-center justify-center">
+    <div className="min-h-screen bg-obsidian text-cream relative overflow-hidden px-4 sm:px-6 py-12 flex items-center justify-center">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_10%,rgba(193,120,32,0.25),transparent_35%),radial-gradient(circle_at_90%_90%,rgba(193,120,32,0.18),transparent_45%)] pointer-events-none" />
       <div className="relative w-full max-w-xl">
         <div className="text-center mb-8">
@@ -137,7 +137,7 @@ export default function CustomerAuth() {
 
         <form
           onSubmit={onSubmit}
-          className="bg-obsidian-100/90 backdrop-blur-md border border-brand-500/20 rounded-3xl p-7 md:p-9 shadow-luxury space-y-5"
+          className="bg-obsidian-100/90 backdrop-blur-md border border-brand-500/20 rounded-3xl p-5 sm:p-7 md:p-9 shadow-luxury space-y-5"
         >
           <div>
             <label className="block font-mono text-[11px] uppercase tracking-[0.3em] text-brand-500 mb-2">
@@ -231,20 +231,20 @@ export default function CustomerAuth() {
             </p>
 
             {(otpPhase === 'sent' || otpPhase === 'verifying') && (
-              <div className="mt-3 flex gap-2 animate-in fade-in duration-300">
+              <div className="mt-3 flex gap-2 animate-in fade-in duration-300 min-w-0">
                 <input
                   value={otpCode}
                   onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
                   placeholder="Enter code"
                   inputMode="numeric"
                   maxLength={6}
-                  className="flex-1 bg-obsidian border border-brand-500/30 rounded-xl px-4 py-3 text-cream tracking-[0.4em] font-mono text-center focus:outline-none focus:border-brand-500 transition-colors"
+                  className="flex-1 min-w-0 bg-obsidian border border-brand-500/30 rounded-xl px-3 sm:px-4 py-3 text-cream tracking-[0.25em] sm:tracking-[0.4em] font-mono text-center focus:outline-none focus:border-brand-500 transition-colors"
                 />
                 <button
                   type="button"
                   onClick={verifyOtp}
                   disabled={otpPhase === 'verifying'}
-                  className="px-5 rounded-xl border border-brand-500/40 text-brand-500 hover:bg-brand-500 hover:text-ink transition-all disabled:opacity-50 flex items-center gap-2"
+                  className="flex-shrink-0 px-4 sm:px-5 py-3 rounded-xl border border-brand-500/40 text-brand-500 hover:bg-brand-500 hover:text-ink transition-all disabled:opacity-50 flex items-center justify-center gap-2 font-mono text-sm"
                 >
                   {otpPhase === 'verifying' ? <Spinner /> : 'Verify'}
                 </button>
