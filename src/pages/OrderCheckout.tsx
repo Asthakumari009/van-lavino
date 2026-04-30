@@ -256,7 +256,11 @@ export default function OrderCheckout() {
       }
       useCustomerAccess.getState().setLastOrderId(internalOrderId);
 
-      const successUrl = `${window.location.origin}/order-success?orderId=${encodeURIComponent(internalOrderId)}`;
+      // Mobile UPI flow → Razorpay POSTs the response to this URL.
+      // /api/razorpay-callback is a Vercel serverless function that
+      // 303-redirects to the SPA's /order-success page (Razorpay POSTs,
+      // static hosting only accepts GET, so we need a real handler).
+      const successUrl = `${window.location.origin}/api/razorpay-callback?orderId=${encodeURIComponent(internalOrderId)}`;
 
       await initiatePayment({
         amount: rpOrder.amount,
