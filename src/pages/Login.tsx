@@ -132,17 +132,30 @@ export default function Login() {
     }
   }
 
+  // Hard-redirect helper. Using `window.location.replace` (not SPA
+  // `navigate`) is deliberate: the auth listener races the optimistic
+  // AAL setState, and SPA-navigated routes have re-rendered into a
+  // bounce-back-to-/login state in past versions of this code. A full
+  // reload re-runs initialize() against the fresh session and lets
+  // ProtectedRoute render the dashboard with zero in-memory race state.
+  // We also kick off a 1.5s safety net — in the rare case the browser
+  // hasn't actually torn down the page by then (extension hooks, slow
+  // unload), we force the navigation again with `href`.
+  function hardRedirect(target: string) {
+    window.location.replace(target);
+    setTimeout(() => {
+      // Still on /login? Force it again. Comparing pathname is good
+      // enough — the new page would have unmounted this closure.
+      if (typeof window !== 'undefined' && window.location.pathname === '/login') {
+        window.location.href = target;
+      }
+    }, 1500);
+  }
+
   // Read the staff record from the auth store; if it's already there
   // (likely — the password sign-in fired the auth listener seconds ago)
   // we route immediately without any further network calls. Falls back
   // to a direct staff fetch only if the store is empty.
-  //
-  // We use a hard navigation (window.location.assign) instead of
-  // react-router's navigate because the auth listener fires on its own
-  // schedule and can race the optimistic AAL setState — that race was
-  // leaving users stuck on "Verifying…" until they manually refreshed.
-  // A full reload re-runs initialize() against the post-MFA session and
-  // ProtectedRoute renders the dashboard with no race.
   async function resolveStaffAndRoute(
     successMsg: string
   ): Promise<{ ok: boolean; target?: string }> {
@@ -155,12 +168,13 @@ export default function Login() {
         return { ok: false };
       }
       toast.success(successMsg);
-      window.location.assign(target);
+      hardRedirect(target);
       return { ok: true, target };
     }
 
     // Store wasn't populated yet — fall back to a direct query so we
-    // don't hang waiting for the listener.
+    // don't hang waiting for the listener. Cap the staff query at 4s so
+    // a network blip can't strand the user on a "Verifying…" spinner.
     const storeUser = useAuth.getState().user;
     let userId = storeUser?.id;
     if (!userId) {
@@ -171,15 +185,23 @@ export default function Login() {
       toast.error('Session went away — please sign in again.');
       return { ok: false };
     }
-    const staff = await fetchStaffDirectly(userId);
+    const staff = await Promise.race([
+      fetchStaffDirectly(userId),
+      new Promise<Staff | null>((resolve) =>
+        setTimeout(() => resolve(null), 4000)
+      ),
+    ]);
     const target = routeForRole(staff);
     if (!target) {
-      toast.error('This account has no staff access.');
-      await supabase.auth.signOut();
-      return { ok: false };
+      // Staff query timed out or returned nothing. Best guess: send them
+      // to /admin — ProtectedRoute will bounce non-admins to /staff or
+      // back to /login as appropriate, with the freshly-loaded session.
+      toast.success(successMsg);
+      hardRedirect('/admin');
+      return { ok: true, target: '/admin' };
     }
     toast.success(successMsg);
-    window.location.assign(target);
+    hardRedirect(target);
     return { ok: true, target };
   }
 

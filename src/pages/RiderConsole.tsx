@@ -152,12 +152,32 @@ export default function RiderConsole() {
       return;
     }
     setMarkingId(stopId);
-    const { data, error } = await supabase.functions.invoke<{
+    // 10-second timeout so the button can't sit on "Marking…" forever
+    // when the rider-update edge function isn't deployed or the rider's
+    // mobile signal drops mid-request.
+    const invokePromise = supabase.functions.invoke<{
       ok: boolean;
       error?: string;
     }>('rider-update', {
       body: { token, action: 'delivered', order_id: stopId },
     });
+    const timeoutPromise = new Promise<{
+      data: null;
+      error: { message: string };
+    }>((resolve) =>
+      setTimeout(
+        () =>
+          resolve({
+            data: null,
+            error: { message: 'Request timed out — try again' },
+          }),
+        10_000
+      )
+    );
+    const { data, error } = (await Promise.race([
+      invokePromise,
+      timeoutPromise,
+    ])) as { data: { ok: boolean; error?: string } | null; error: { message: string } | null };
     setMarkingId(null);
     if (error || !data?.ok) {
       toast.error(data?.error ?? error?.message ?? 'Could not mark delivered');

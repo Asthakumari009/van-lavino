@@ -8,7 +8,7 @@ import {
   useState,
 } from 'react';
 import type { ReactNode } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import DOMPurify from 'dompurify';
 import { QRCodeSVG } from 'qrcode.react';
@@ -124,7 +124,6 @@ function useBranchFilter() {
 export default function AdminDashboard() {
   const staffRecord = useAuth((s) => s.staffRecord);
   const signOut = useAuth((s) => s.signOut);
-  const navigate = useNavigate();
   const [view, setView] = useState<View>('overview');
 
   const [branches, setBranches] = useState<Branch[]>([]);
@@ -161,8 +160,13 @@ export default function AdminDashboard() {
   };
 
   const onSignOut = async () => {
-    await signOut();
-    navigate('/login', { replace: true });
+    // Hard redirect — see StaffDashboard for the rationale. supabase
+    // signOut occasionally hangs on a slow network and was making this
+    // button feel unresponsive.
+    void signOut().catch(() => {
+      /* server-side token timeout will catch us up; local store is wiped */
+    });
+    window.location.replace('/login');
   };
 
   return (

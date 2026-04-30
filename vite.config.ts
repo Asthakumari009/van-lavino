@@ -8,6 +8,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
+      // skipWaiting + clientsClaim: when a new build deploys, the new
+      // service worker takes over open tabs immediately instead of
+      // waiting for every tab to close. Without this, users keep running
+      // old bundled JS even after refreshing — symptoms include "stuck on
+      // Verifying…", buttons that need multiple clicks, and skeleton
+      // screens that never resolve, because the in-flight bundle predates
+      // the bug fix.
+      workbox: {
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
+      },
       includeAssets: ['favicon.svg'],
       manifest: {
         name: 'Van Lavino Staff',

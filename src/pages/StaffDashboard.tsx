@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   BookOpenCheck,
@@ -44,7 +44,6 @@ type View = 'live' | 'manual' | 'history' | 'tables' | 'kd' | 'reservations';
 export default function StaffDashboard() {
   const staffRecord = useAuth((s) => s.staffRecord);
   const signOut = useAuth((s) => s.signOut);
-  const navigate = useNavigate();
   const [view, setView] = useState<View>('live');
   const [branch, setBranch] = useState<Branch | null>(null);
 
@@ -72,8 +71,19 @@ export default function StaffDashboard() {
   }
 
   const onSignOut = async () => {
-    await signOut();
-    navigate('/login', { replace: true });
+    // Fire signOut in the background. We do NOT await it before
+    // redirecting — supabase.auth.signOut() occasionally hangs on a slow
+    // network and was leaving the sidebar button feeling unresponsive
+    // (the user would click 2–3 times and then refresh). The
+    // window.location.replace below tears down the page regardless;
+    // initialize() on the freshly-loaded /login picks up the cleared
+    // session.
+    void signOut().catch(() => {
+      /* network error during signOut isn't fatal — the local session is
+       * already wiped by the store's set, and the server will time the
+       * token out on its own. */
+    });
+    window.location.replace('/login');
   };
 
   return (
