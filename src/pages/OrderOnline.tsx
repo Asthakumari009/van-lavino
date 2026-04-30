@@ -123,7 +123,7 @@ function TopBar({
 
   return (
     <header className="fixed top-0 inset-x-0 z-40 backdrop-blur-xl bg-obsidian/85 border-b border-brand-500/10">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-4 flex items-center justify-between gap-3">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-8 py-4 flex items-center justify-between gap-2 sm:gap-3">
         <Link
           to="/"
           className="font-display italic text-xl md:text-2xl text-brand-500 tracking-[0.2em] whitespace-nowrap"
@@ -182,7 +182,7 @@ function TopBar({
               aria-label="Choose fulfillment branch"
             >
               <MapPin size={13} className="text-brand-500" />
-              <span className="truncate max-w-[120px] md:max-w-[180px]">
+              <span className="truncate max-w-[80px] sm:max-w-[120px] md:max-w-[180px]">
                 {selected?.name ?? 'Choose branch'}
               </span>
               <ChevronDown
@@ -248,13 +248,13 @@ function TopBar({
 
 function Hero({ open }: { open: boolean }) {
   return (
-    <section className="relative pt-28 pb-10 md:pt-32 md:pb-14 px-6 lg:px-12">
+    <section className="relative pt-28 pb-10 md:pt-32 md:pb-14 px-4 sm:px-6 lg:px-12">
       <div className="absolute inset-0 -z-10 bg-[radial-gradient(ellipse_at_center,rgba(193,120,32,0.18),transparent_60%)] pointer-events-none" />
       <div className="max-w-5xl mx-auto text-center">
         <p className="font-mono text-xs text-brand-500 tracking-[0.4em] uppercase mb-4">
           Bakery · Pickup &amp; Delivery
         </p>
-        <h1 className="font-display italic text-4xl md:text-6xl lg:text-[80px] text-cream leading-[1.05] mb-6">
+        <h1 className="font-display italic text-[34px] sm:text-4xl md:text-6xl lg:text-[80px] text-cream leading-[1.05] mb-6">
           Order our breads <span className="gold-shimmer">to your door</span>
         </h1>
         <p className="font-body text-cream/65 max-w-xl mx-auto leading-relaxed mb-6">
@@ -346,35 +346,35 @@ function ItemCard({ item }: { item: MenuItem }) {
         </span>
       </div>
 
-      <div className="p-5 flex flex-col flex-1">
-        <h3 className="font-display italic text-xl text-cream leading-snug line-clamp-1">
+      <div className="p-3 sm:p-5 flex flex-col flex-1 min-w-0">
+        <h3 className="font-display italic text-base sm:text-xl text-cream leading-snug line-clamp-1">
           {item.name}
         </h3>
         {item.description && (
-          <p className="text-cream/75 text-[12px] leading-snug mt-1 line-clamp-2">
+          <p className="text-cream/75 text-[11px] sm:text-[12px] leading-snug mt-1 line-clamp-2">
             {item.description}
           </p>
         )}
-        <div className="mt-auto pt-4 flex items-center justify-between gap-2">
-          <span className="font-display text-2xl leading-none text-brand-500">
+        <div className="mt-auto pt-3 sm:pt-4 flex items-center justify-between gap-2 min-w-0">
+          <span className="font-display text-lg sm:text-2xl leading-none text-brand-500 truncate">
             ₹{formatPrice(item.price)}
           </span>
           {quantity > 0 ? (
-            <div className="flex items-center gap-1 bg-brand-500/10 border border-brand-500/40 rounded-full p-1">
+            <div className="flex items-center gap-0.5 sm:gap-1 bg-brand-500/10 border border-brand-500/40 rounded-full p-0.5 sm:p-1 flex-shrink-0">
               <button
                 onClick={() => updateQuantity(item.id, quantity - 1)}
                 aria-label="Decrease quantity"
-                className="w-7 h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all text-base leading-none"
+                className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all text-base leading-none"
               >
                 −
               </button>
-              <span className="w-6 text-center text-cream text-sm font-mono">
+              <span className="w-5 sm:w-6 text-center text-cream text-xs sm:text-sm font-mono">
                 {quantity}
               </span>
               <button
                 onClick={() => updateQuantity(item.id, quantity + 1)}
                 aria-label="Increase quantity"
-                className="w-7 h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all text-base leading-none"
+                className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all text-base leading-none"
               >
                 +
               </button>
@@ -382,7 +382,7 @@ function ItemCard({ item }: { item: MenuItem }) {
           ) : (
             <button
               onClick={onAdd}
-              className="inline-flex items-center gap-1 border border-brand-500 text-brand-500 px-4 py-1.5 rounded-full text-xs uppercase tracking-[0.2em] font-mono hover:bg-brand-500 hover:text-ink transition-all duration-200"
+              className="inline-flex items-center gap-1 border border-brand-500 text-brand-500 px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-[0.2em] font-mono hover:bg-brand-500 hover:text-ink transition-all duration-200 flex-shrink-0 whitespace-nowrap"
             >
               + Add
             </button>
@@ -574,7 +574,7 @@ function Row({
 
 function FulfillmentBadge() {
   return (
-    <div className="max-w-7xl mx-auto px-6 lg:px-12 mt-2 mb-10">
+    <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-12 mt-2 mb-10">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="flex items-start gap-3 p-4 rounded-2xl border border-brand-500/15 bg-obsidian-100/60">
           <span className="w-9 h-9 rounded-full border border-brand-500/40 text-brand-500 flex items-center justify-center flex-shrink-0">
@@ -756,7 +756,7 @@ export default function OrderOnline() {
       <Hero open={open} />
       <FulfillmentBadge />
 
-      <main className="max-w-7xl mx-auto px-4 md:px-8 pb-32">
+      <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-8 pb-32">
         {loadError ? (
           <div className="text-center py-20">
             <p className="font-display italic text-2xl text-cream mb-3">
@@ -765,7 +765,7 @@ export default function OrderOnline() {
             <p className="text-cream/75 text-sm">{loadError}</p>
           </div>
         ) : items === null ? (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
             {Array.from({ length: 8 }).map((_, i) => (
               <CardSkeleton key={i} />
             ))}
@@ -781,7 +781,7 @@ export default function OrderOnline() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
             {visibleItems.map((item) => (
               <ItemCard key={item.id} item={item} />
             ))}

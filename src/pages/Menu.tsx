@@ -564,36 +564,36 @@ function ItemCard({
         )}
       </div>
 
-      <div className="p-4 flex flex-col flex-1">
-        <h3 className="text-cream text-[15px] font-semibold leading-snug line-clamp-1">
+      <div className="p-3 sm:p-4 flex flex-col flex-1 min-w-0">
+        <h3 className="text-cream text-[14px] sm:text-[15px] font-semibold leading-snug line-clamp-1">
           {item.name}
         </h3>
         {item.description && (
-          <p className="text-cream/70 text-[12px] leading-snug mt-1 line-clamp-2">
+          <p className="text-cream/70 text-[11px] sm:text-[12px] leading-snug mt-1 line-clamp-2">
             {item.description}
           </p>
         )}
-        <div className="mt-auto pt-4 flex items-center justify-between gap-2">
-          <span className="font-display text-[24px] leading-none text-brand-500">
+        <div className="mt-auto pt-3 sm:pt-4 flex items-center justify-between gap-2 min-w-0">
+          <span className="font-display text-[18px] sm:text-[24px] leading-none text-brand-500 truncate">
             ₹{formatPrice(item.price)}
           </span>
-          <div className="transition-[width] duration-300">
+          <div className="transition-[width] duration-300 flex-shrink-0">
             {quantity > 0 ? (
-              <div className="flex items-center gap-1 bg-brand-500/10 border border-brand-500/40 rounded-full p-1">
+              <div className="flex items-center gap-0.5 sm:gap-1 bg-brand-500/10 border border-brand-500/40 rounded-full p-0.5 sm:p-1">
                 <button
                   onClick={() => updateQuantity(item.id, quantity - 1)}
                   aria-label="Decrease quantity"
-                  className="w-7 h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all"
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all"
                 >
                   <Icon.Minus />
                 </button>
-                <span className="w-6 text-center text-cream text-sm font-mono">
+                <span className="w-5 sm:w-6 text-center text-cream text-xs sm:text-sm font-mono">
                   {quantity}
                 </span>
                 <button
                   onClick={() => updateQuantity(item.id, quantity + 1)}
                   aria-label="Increase quantity"
-                  className="w-7 h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all"
+                  className="w-6 h-6 sm:w-7 sm:h-7 rounded-full bg-obsidian text-brand-500 flex items-center justify-center hover:bg-brand-500 hover:text-ink transition-all"
                 >
                   <Icon.Plus />
                 </button>
@@ -601,7 +601,7 @@ function ItemCard({
             ) : (
               <button
                 onClick={onAdd}
-                className="inline-flex items-center gap-1 border border-brand-500 text-brand-500 px-4 py-1.5 rounded-full text-xs uppercase tracking-[0.2em] font-mono hover:bg-brand-500 hover:text-ink transition-all duration-200"
+                className="inline-flex items-center gap-1 border border-brand-500 text-brand-500 px-2.5 py-1 sm:px-4 sm:py-1.5 rounded-full text-[10px] sm:text-xs uppercase tracking-wider sm:tracking-[0.2em] font-mono hover:bg-brand-500 hover:text-ink transition-all duration-200 whitespace-nowrap"
               >
                 <Icon.Plus size={12} />
                 Add
@@ -1324,7 +1324,7 @@ export default function Menu() {
               onSelect={scrollToCategory}
             />
           </div>
-          <main className="max-w-7xl mx-auto px-4 md:px-8 pb-32 pt-6">
+          <main className="max-w-7xl mx-auto px-3 sm:px-4 md:px-8 pb-32 pt-6">
             {filteredGrouped.length === 0 ? (
               <EmptyState
                 title="No matches found"
@@ -1346,7 +1346,7 @@ export default function Menu() {
                     })()}
                     {g.category}
                   </h2>
-                  <div className="grid grid-cols-2 md:grid-cols-3 gap-4 md:gap-6">
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
                     {g.items.map((item) => (
                       <ItemCard
                         key={item.id}
