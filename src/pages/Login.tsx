@@ -23,7 +23,6 @@ export default function Login() {
   const staffRecord = useAuth((s) => s.staffRecord);
   const currentAal = useAuth((s) => s.currentAal);
   const nextAal = useAuth((s) => s.nextAal);
-  const refreshAal = useAuth((s) => s.refreshAal);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -215,10 +214,26 @@ export default function Login() {
     setError(false);
     setSubmitting(true);
 
-    const { error: verifyErr } = await supabase.auth.mfa.challengeAndVerify({
-      factorId,
-      code,
-    });
+    // 10s ceiling on challengeAndVerify itself — supabase has been seen
+    // to hang on flaky mobile networks and we never want the button to
+    // sit on "Verifying…" indefinitely.
+    let verifyErr: { message?: string } | null = null;
+    try {
+      const verifyResult = (await Promise.race([
+        supabase.auth.mfa.challengeAndVerify({ factorId, code }),
+        new Promise((resolve) =>
+          setTimeout(
+            () => resolve({ error: { message: 'Verify timed out — try again' } }),
+            10_000
+          )
+        ),
+      ])) as { error: { message?: string } | null };
+      verifyErr = verifyResult.error ?? null;
+    } catch (err) {
+      verifyErr = {
+        message: err instanceof Error ? err.message : 'Verify failed',
+      };
+    }
 
     if (verifyErr) {
       setSubmitting(false);
@@ -228,23 +243,25 @@ export default function Login() {
       return;
     }
 
-    // challengeAndVerify just succeeded → AAL is now aal2 server-side.
-    // Optimistically reflect the elevation in the store so consumers
-    // see aal2 right away; refresh in the background to reconcile.
-    useAuth.setState({ currentAal: 'aal2', nextAal: 'aal2' });
-    void refreshAal();
-
-    // Resolve staff + route. The store is overwhelmingly likely to
-    // already hold the staff record from the password sign-in's
-    // listener fire (the user just spent ~5 s typing a 6-digit code,
-    // which is plenty of wall-clock for the listener's Promise.all).
-    // If for some reason it isn't there, resolveStaffAndRoute falls
-    // back to a direct query.
-    const result = await resolveStaffAndRoute('Verified · welcome back');
-    if (!result.ok) {
-      setSubmitting(false);
-      setError(true);
-    }
+    // Server-side AAL is now aal2. Don't try anything fancy — no
+    // staff lookup, no SPA navigate, no awaiting the auth listener.
+    // The store almost always has the staff record from the password
+    // sign-in's listener fire; we read it best-effort and pick the
+    // landing route. If we can't tell, default to /admin and let
+    // ProtectedRoute redirect non-admins to /staff.
+    const stored = useAuth.getState().staffRecord;
+    const target = routeForRole(stored) ?? '/admin';
+    toast.success('Verified · welcome back');
+    // Three concentric escape hatches: replace fires immediately, the
+    // 300ms href catches any browser that ignored the first call, and
+    // the 1.5s assign is the last-resort belt-and-suspenders.
+    window.location.replace(target);
+    setTimeout(() => {
+      if (window.location.pathname === '/login') window.location.href = target;
+    }, 300);
+    setTimeout(() => {
+      if (window.location.pathname === '/login') window.location.assign(target);
+    }, 1500);
   }
 
   async function cancelMfa() {

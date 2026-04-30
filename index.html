@@ -8,6 +8,27 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // One-shot SW + cache purge for browsers that still hold a stale
+      // precache from the previous PWA build. Runs before main.tsx so
+      // even if the React app crashes, the cache is cleaned. Gated by
+      // localStorage so it only runs once per browser.
+      try {
+        if (!localStorage.getItem('vanlavino:sw-purge:v2')) {
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              for (var i = 0; i < regs.length; i++) regs[i].unregister();
+            }).catch(function () {});
+          }
+          if (typeof caches !== 'undefined') {
+            caches.keys().then(function (keys) {
+              for (var i = 0; i < keys.length; i++) caches.delete(keys[i]);
+            }).catch(function () {});
+          }
+          localStorage.setItem('vanlavino:sw-purge:v2', '1');
+        }
+      } catch (e) { /* private mode etc. */ }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

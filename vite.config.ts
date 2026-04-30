@@ -7,14 +7,17 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      // RETIRING THE PWA. The previous SW was serving stale precached
+      // bundles to users for hours after each deploy — every "stuck on
+      // Verifying…", "sign-out doesn't work", "menu skeleton frozen"
+      // bug report traced back to old JS being served from the SW
+      // cache. selfDestroying: true tells vite-plugin-pwa to emit a SW
+      // whose only job is to unregister itself and delete every cache
+      // it finds. After every active client has hit this build once,
+      // there are no SWs left and the site behaves like a normal web
+      // app: every page load fetches fresh JS from the server.
+      selfDestroying: true,
       registerType: 'autoUpdate',
-      // skipWaiting + clientsClaim: when a new build deploys, the new
-      // service worker takes over open tabs immediately instead of
-      // waiting for every tab to close. Without this, users keep running
-      // old bundled JS even after refreshing — symptoms include "stuck on
-      // Verifying…", buttons that need multiple clicks, and skeleton
-      // screens that never resolve, because the in-flight bundle predates
-      // the bug fix.
       workbox: {
         skipWaiting: true,
         clientsClaim: true,
