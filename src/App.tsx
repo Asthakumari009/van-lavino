@@ -60,29 +60,15 @@ function ProtectedRoute({
 }) {
   const isLoading = useAuth((s) => s.isLoading);
   const staffRecord = useAuth((s) => s.staffRecord);
-  const currentAal = useAuth((s) => s.currentAal);
-  const nextAal = useAuth((s) => s.nextAal);
   if (isLoading) return <AuthLoading />;
   if (!staffRecord) return <Navigate to="/login" replace />;
   if (!allow.includes(staffRecord.role)) {
     const target = homeForStaff(staffRecord);
     return <Navigate to={target ?? '/login'} replace />;
   }
-
-  // Hard MFA enforcement for admin role:
-  //   - already at aal2  → through
-  //   - factor exists but not yet challenged (nextAal=aal2, currentAal=aal1)
-  //                       → bounce to /login so they enter the code
-  //   - no factor at all (nextAal=aal1) → bounce to /setup-mfa
-  // This pairs with the RLS in migration 016 — admins literally
-  // can't write at aal1 even if they bypass the frontend.
-  if (staffRecord.role === 'admin' && currentAal !== 'aal2') {
-    if (nextAal === 'aal2') {
-      return <Navigate to="/login" replace />;
-    }
-    return <Navigate to="/setup-mfa" replace />;
-  }
-
+  // MFA / aal2 gating intentionally removed — the matching RLS
+  // requirement is dropped in migration 018. Admins can re-enable
+  // MFA later through Supabase Auth settings + a follow-up migration.
   return <>{children}</>;
 }
 

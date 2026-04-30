@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { ShieldCheck } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/useAuth';
 import Spinner from '../components/Spinner';
@@ -14,57 +13,36 @@ function routeForRole(staff: Staff | null): string | null {
   return null;
 }
 
-type Phase = 'password' | 'mfa';
-
 export default function Login() {
   const navigate = useNavigate();
   const user = useAuth((s) => s.user);
   const isAuthenticated = useAuth((s) => s.isAuthenticated);
   const staffRecord = useAuth((s) => s.staffRecord);
-  const currentAal = useAuth((s) => s.currentAal);
-  const nextAal = useAuth((s) => s.nextAal);
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
 
-  // MFA challenge state
-  const [phase, setPhase] = useState<Phase>('password');
-  const [factorId, setFactorId] = useState<string | null>(null);
-  const [code, setCode] = useState('');
-
-  // This effect only handles the "session restored on mount" case (a
-  // staff member loads /login while already signed in from a previous
-  // visit). Active sign-in flows route themselves directly via the
-  // submit handlers below — relying on this useEffect for that was
-  // racing the auth listener and leaving users stuck on "Verifying…"
-  // until they refreshed. While `submitting` is true, this effect
-  // stays out of the way.
+  // Session restored on mount: if a staff member already has a session
+  // when they hit /login, route them to the right dashboard instead of
+  // showing the form. While submitting, this stays out of the way so we
+  // don't race the active-sign-in handler.
   useEffect(() => {
     if (submitting) return;
     if (!user || !isAuthenticated) return;
-
     const target = routeForRole(staffRecord);
-
     if (!target) {
-      // Authenticated user has no staff record — refuse access.
       void supabase.auth.signOut();
       setError(true);
-      setPhase('password');
-      setFactorId(null);
-      setCode('');
       toast.error('This account has no staff access.');
       return;
     }
+    navigate(target, { replace: true });
+  }, [submitting, user, isAuthenticated, staffRecord, navigate]);
 
-    const mfaSatisfied = !nextAal || nextAal !== 'aal2' || currentAal === 'aal2';
-    if (mfaSatisfied) navigate(target, { replace: true });
-  }, [submitting, user, isAuthenticated, staffRecord, currentAal, nextAal, navigate]);
-
-  // Direct staff lookup that doesn't go through the zustand store. Used
-  // by the submit handlers so we never have to wait for the auth listener
-  // to finish its Promise.all before deciding where to route.
+  // Direct staff lookup — used by the submit handler so we don't have
+  // to wait for the auth listener's Promise.all to settle.
   async function fetchStaffDirectly(userId: string): Promise<Staff | null> {
     const { data } = await supabase
       .from('staff')
@@ -91,251 +69,48 @@ export default function Login() {
       return;
     }
 
-    // Did this account enroll a TOTP factor? Supabase signals that with
-    // nextLevel === 'aal2' while the password sign-in only buys aal1.
-    const { data: aalData } =
-      await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    const needsMfa =
-      aalData?.nextLevel === 'aal2' && aalData.currentLevel !== 'aal2';
-
-    if (needsMfa) {
-      const { data: factors, error: factorsErr } =
-        await supabase.auth.mfa.listFactors();
-      if (factorsErr) {
-        toast.error(factorsErr.message);
-        await supabase.auth.signOut();
-        setSubmitting(false);
-        return;
-      }
-      const verified = factors.totp.find((f) => f.status === 'verified');
-      if (!verified) {
-        // Misconfig: aal2 demanded but no verified factor exists.
-        toast.error('Two-factor required but no verified device on file.');
-        await supabase.auth.signOut();
-        setSubmitting(false);
-        return;
-      }
-      setFactorId(verified.id);
-      setPhase('mfa');
-      setSubmitting(false);
-      return;
-    }
-
-    // No MFA — resolve staff + route. Store-first: if the listener
-    // already populated staffRecord we navigate without an extra
-    // round-trip. Otherwise fetch directly.
-    const result = await resolveStaffAndRoute('Welcome back');
-    if (!result.ok) {
-      setSubmitting(false);
-      setError(true);
-    }
-  }
-
-  // Hard-redirect helper. Using `window.location.replace` (not SPA
-  // `navigate`) is deliberate: the auth listener races the optimistic
-  // AAL setState, and SPA-navigated routes have re-rendered into a
-  // bounce-back-to-/login state in past versions of this code. A full
-  // reload re-runs initialize() against the fresh session and lets
-  // ProtectedRoute render the dashboard with zero in-memory race state.
-  // We also kick off a 1.5s safety net — in the rare case the browser
-  // hasn't actually torn down the page by then (extension hooks, slow
-  // unload), we force the navigation again with `href`.
-  function hardRedirect(target: string) {
-    window.location.replace(target);
-    setTimeout(() => {
-      // Still on /login? Force it again. Comparing pathname is good
-      // enough — the new page would have unmounted this closure.
-      if (typeof window !== 'undefined' && window.location.pathname === '/login') {
-        window.location.href = target;
-      }
-    }, 1500);
-  }
-
-  // Read the staff record from the auth store; if it's already there
-  // (likely — the password sign-in fired the auth listener seconds ago)
-  // we route immediately without any further network calls. Falls back
-  // to a direct staff fetch only if the store is empty.
-  async function resolveStaffAndRoute(
-    successMsg: string
-  ): Promise<{ ok: boolean; target?: string }> {
+    // Resolve target route. Store-first; fall back to a direct staff
+    // query (capped at 4s) if the auth listener hasn't populated yet.
+    const TIMEOUT = '__T__';
     const stored = useAuth.getState().staffRecord;
-    if (stored) {
-      const target = routeForRole(stored);
-      if (!target) {
-        toast.error('This account has no staff access.');
-        await supabase.auth.signOut();
-        return { ok: false };
-      }
-      toast.success(successMsg);
-      hardRedirect(target);
-      return { ok: true, target };
-    }
-
-    // Store wasn't populated yet — fall back to a direct query so we
-    // don't hang waiting for the listener. Cap the staff query at 4s so
-    // a network blip can't strand the user on a "Verifying…" spinner.
-    const storeUser = useAuth.getState().user;
-    let userId = storeUser?.id;
-    if (!userId) {
-      const { data: sessionData } = await supabase.auth.getSession();
-      userId = sessionData.session?.user.id;
-    }
-    if (!userId) {
-      toast.error('Session went away — please sign in again.');
-      return { ok: false };
-    }
-    const staff = await Promise.race([
-      fetchStaffDirectly(userId),
-      new Promise<Staff | null>((resolve) =>
-        setTimeout(() => resolve(null), 4000)
-      ),
-    ]);
-    const target = routeForRole(staff);
+    let target = routeForRole(stored);
     if (!target) {
-      // Staff query timed out or returned nothing. Best guess: send them
-      // to /admin — ProtectedRoute will bounce non-admins to /staff or
-      // back to /login as appropriate, with the freshly-loaded session.
-      toast.success(successMsg);
-      hardRedirect('/admin');
-      return { ok: true, target: '/admin' };
-    }
-    toast.success(successMsg);
-    hardRedirect(target);
-    return { ok: true, target };
-  }
-
-  async function onMfaSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    if (!factorId) return;
-    if (code.length < 6) {
-      toast.error('Enter the 6-digit code');
-      return;
-    }
-    setError(false);
-    setSubmitting(true);
-
-    // Two stages, each with its own 8s ceiling. challengeAndVerify
-    // wraps challenge + verify in one round-trip; we split them so a
-    // hang in either phase surfaces faster, and so the verify call
-    // itself can be retried independently if the challenge succeeded.
-    const TIMEOUT_SENTINEL = '__TIMEOUT__';
-    async function withTimeout<T>(
-      promise: Promise<T>,
-      ms: number
-    ): Promise<T | typeof TIMEOUT_SENTINEL> {
-      return Promise.race([
-        promise,
-        new Promise<typeof TIMEOUT_SENTINEL>((resolve) =>
-          setTimeout(() => resolve(TIMEOUT_SENTINEL), ms)
-        ),
-      ]);
-    }
-
-    let verifyErr: { message?: string } | null = null;
-    let timedOut = false;
-    try {
-      const challengeRes = await withTimeout(
-        supabase.auth.mfa.challenge({ factorId }),
-        15_000
-      );
-      if (challengeRes === TIMEOUT_SENTINEL) {
-        timedOut = true;
-        verifyErr = { message: 'Verify timed out — clearing session and reloading' };
-      } else if (challengeRes.error || !challengeRes.data?.id) {
-        verifyErr = {
-          message: challengeRes.error?.message ?? 'Could not start MFA challenge',
-        };
-      } else {
-        const verifyRes = await withTimeout(
-          supabase.auth.mfa.verify({
-            factorId,
-            challengeId: challengeRes.data.id,
-            code,
-          }),
-          15_000
-        );
-        if (verifyRes === TIMEOUT_SENTINEL) {
-          timedOut = true;
-          verifyErr = { message: 'Verify timed out — clearing session and reloading' };
-        } else if (verifyRes.error) {
-          verifyErr = { message: verifyRes.error.message ?? 'Verify failed' };
-        }
+      const sessionUserId =
+        useAuth.getState().user?.id ??
+        (await supabase.auth.getSession()).data.session?.user.id ??
+        null;
+      if (sessionUserId) {
+        const staff = await Promise.race<Staff | null | typeof TIMEOUT>([
+          fetchStaffDirectly(sessionUserId),
+          new Promise<typeof TIMEOUT>((resolve) =>
+            setTimeout(() => resolve(TIMEOUT), 4000)
+          ),
+        ]);
+        if (staff !== TIMEOUT) target = routeForRole(staff);
       }
-    } catch (err) {
-      verifyErr = {
-        message: err instanceof Error ? err.message : 'Verify failed',
-      };
     }
 
-    if (verifyErr) {
-      setSubmitting(false);
-      setError(true);
-      setCode('');
-      toast.error(verifyErr.message || 'Code did not match');
-      // Self-heal on timeout: a hang almost always means the local
-      // session is in a half-elevated state that won't recover. Wipe
-      // every supabase auth key, unregister any leftover SW, and hard-
-      // reload to /login so the next attempt starts clean.
-      if (timedOut) {
-        setTimeout(() => {
-          try {
-            Object.keys(localStorage)
-              .filter((k) => k.startsWith('sb-'))
-              .forEach((k) => localStorage.removeItem(k));
-          } catch {
-            /* private mode */
-          }
-          try {
-            if ('serviceWorker' in navigator) {
-              navigator.serviceWorker
-                .getRegistrations()
-                .then((regs) => Promise.all(regs.map((r) => r.unregister())))
-                .finally(() => window.location.replace('/login'));
-              return;
-            }
-          } catch {
-            /* fall through */
-          }
-          window.location.replace('/login');
-        }, 1200);
-      }
-      return;
+    if (!target) {
+      // Last resort — let ProtectedRoute sort it out from a known route.
+      target = '/admin';
     }
 
-    // Server-side AAL is now aal2. Don't try anything fancy — no
-    // staff lookup, no SPA navigate, no awaiting the auth listener.
-    // The store almost always has the staff record from the password
-    // sign-in's listener fire; we read it best-effort and pick the
-    // landing route. If we can't tell, default to /admin and let
-    // ProtectedRoute redirect non-admins to /staff.
-    const stored = useAuth.getState().staffRecord;
-    const target = routeForRole(stored) ?? '/admin';
-    toast.success('Verified · welcome back');
-    // Three concentric escape hatches: replace fires immediately, the
-    // 300ms href catches any browser that ignored the first call, and
-    // the 1.5s assign is the last-resort belt-and-suspenders.
+    toast.success('Welcome back');
+    // Hard redirect via window.location so we sidestep any SPA-router
+    // race with the auth listener. Three concentric attempts: replace
+    // immediately, href at 300ms, assign at 1.5s.
     window.location.replace(target);
     setTimeout(() => {
-      if (window.location.pathname === '/login') window.location.href = target;
+      if (window.location.pathname === '/login') window.location.href = target!;
     }, 300);
     setTimeout(() => {
-      if (window.location.pathname === '/login') window.location.assign(target);
+      if (window.location.pathname === '/login') window.location.assign(target!);
     }, 1500);
   }
 
-  async function cancelMfa() {
-    await supabase.auth.signOut();
-    setPhase('password');
-    setFactorId(null);
-    setCode('');
-    setPassword('');
-    toast('Signed out · sign in again to retry');
-  }
-
-  // Last-resort escape hatch. If the page is in any weird state — old
-  // SW still intercepting, half-elevated session, you-name-it — this
-  // button wipes localStorage + every cache + every SW and reloads to
-  // a clean /login. Should never normally be needed, but it's there.
+  // Last-resort escape hatch. Wipes localStorage + sessionStorage +
+  // every cache + every SW, then reloads. Should never normally be
+  // needed, but it's there for any genuinely stuck state.
   function forceReset() {
     try {
       Object.keys(localStorage)
@@ -350,18 +125,20 @@ export default function Login() {
       /* noop */
     }
     const reload = () => window.location.replace('/login');
-    const swDone = ('serviceWorker' in navigator)
-      ? navigator.serviceWorker
-          .getRegistrations()
-          .then((regs) => Promise.all(regs.map((r) => r.unregister())))
-          .catch(() => {})
-      : Promise.resolve();
-    const cachesDone = (typeof caches !== 'undefined')
-      ? caches
-          .keys()
-          .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
-          .catch(() => {})
-      : Promise.resolve();
+    const swDone =
+      'serviceWorker' in navigator
+        ? navigator.serviceWorker
+            .getRegistrations()
+            .then((regs) => Promise.all(regs.map((r) => r.unregister())))
+            .catch(() => {})
+        : Promise.resolve();
+    const cachesDone =
+      typeof caches !== 'undefined'
+        ? caches
+            .keys()
+            .then((keys) => Promise.all(keys.map((k) => caches.delete(k))))
+            .catch(() => {})
+        : Promise.resolve();
     Promise.allSettled([swDone, cachesDone]).finally(reload);
   }
 
@@ -387,115 +164,54 @@ export default function Login() {
           </p>
         </div>
 
-        {phase === 'password' ? (
-          <form
-            onSubmit={onPasswordSubmit}
-            className="bg-obsidian-100 border border-brand-500/15 rounded-2xl p-8 space-y-5"
+        <form
+          onSubmit={onPasswordSubmit}
+          className="bg-obsidian-100 border border-brand-500/15 rounded-2xl p-8 space-y-5"
+        >
+          <div>
+            <label className="font-mono text-xs text-brand-500 tracking-[0.3em] uppercase block mb-2">
+              Email
+            </label>
+            <input
+              type="email"
+              required
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                if (error) setError(false);
+              }}
+              className={inputClass}
+              placeholder="you@vanlavino.com"
+              autoComplete="email"
+            />
+          </div>
+          <div>
+            <label className="font-mono text-xs text-brand-500 tracking-[0.3em] uppercase block mb-2">
+              Password
+            </label>
+            <input
+              type="password"
+              required
+              value={password}
+              onChange={(e) => {
+                setPassword(e.target.value);
+                if (error) setError(false);
+              }}
+              className={inputClass}
+              placeholder="••••••••"
+              autoComplete="current-password"
+            />
+          </div>
+          <button
+            type="submit"
+            disabled={submitting}
+            className="w-full bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
           >
-            <div>
-              <label className="font-mono text-xs text-brand-500 tracking-[0.3em] uppercase block mb-2">
-                Email
-              </label>
-              <input
-                type="email"
-                required
-                value={email}
-                onChange={(e) => {
-                  setEmail(e.target.value);
-                  if (error) setError(false);
-                }}
-                className={inputClass}
-                placeholder="you@vanlavino.com"
-                autoComplete="email"
-              />
-            </div>
-            <div>
-              <label className="font-mono text-xs text-brand-500 tracking-[0.3em] uppercase block mb-2">
-                Password
-              </label>
-              <input
-                type="password"
-                required
-                value={password}
-                onChange={(e) => {
-                  setPassword(e.target.value);
-                  if (error) setError(false);
-                }}
-                className={inputClass}
-                placeholder="••••••••"
-                autoComplete="current-password"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="w-full bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {submitting && <Spinner />}
-              {submitting ? 'Signing in…' : 'Sign In'}
-            </button>
-          </form>
-        ) : (
-          <form
-            onSubmit={onMfaSubmit}
-            className="bg-obsidian-100 border border-brand-500/15 rounded-2xl p-8 space-y-5"
-          >
-            <div className="flex items-center gap-3 mb-2">
-              <span className="w-10 h-10 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-500 flex items-center justify-center">
-                <ShieldCheck size={18} />
-              </span>
-              <div>
-                <p className="font-mono text-[10px] tracking-[0.3em] uppercase text-brand-500">
-                  Two-factor required
-                </p>
-                <p className="font-display italic text-xl text-cream leading-tight">
-                  Enter your code
-                </p>
-              </div>
-            </div>
-            <p className="text-cream/65 text-sm leading-relaxed">
-              Open your authenticator app and enter the 6-digit code for Van Lavino.
-            </p>
-            <div>
-              <label className="font-mono text-xs text-brand-500 tracking-[0.3em] uppercase block mb-2">
-                Authenticator code
-              </label>
-              <input
-                inputMode="numeric"
-                autoFocus
-                required
-                value={code}
-                onChange={(e) => {
-                  setCode(e.target.value.replace(/\D/g, '').slice(0, 6));
-                  if (error) setError(false);
-                }}
-                maxLength={6}
-                className={`${inputClass} text-center tracking-[0.5em] font-mono text-lg`}
-                placeholder="••••••"
-                autoComplete="one-time-code"
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={submitting || code.length < 6}
-              className="w-full bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-            >
-              {submitting && <Spinner />}
-              {submitting ? 'Verifying…' : 'Verify & Continue'}
-            </button>
-            <button
-              type="button"
-              onClick={cancelMfa}
-              className="block mx-auto font-mono text-[10px] tracking-[0.25em] uppercase text-cream/65 hover:text-brand-600 transition-colors"
-            >
-              Cancel · Sign in as someone else
-            </button>
-          </form>
-        )}
+            {submitting && <Spinner />}
+            {submitting ? 'Signing in…' : 'Sign In'}
+          </button>
+        </form>
 
-        {/* Always-visible escape hatch. If the page is genuinely stuck
-            — old SW intercepting requests, half-elevated session — this
-            wipes everything and reloads. */}
         <button
           type="button"
           onClick={forceReset}
