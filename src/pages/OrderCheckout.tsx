@@ -256,6 +256,49 @@ export default function OrderCheckout() {
       }
       useCustomerAccess.getState().setLastOrderId(internalOrderId);
 
+      // Mobile reliability: poll our /api/razorpay-status endpoint so we
+      // can navigate to /order-success even if the modal handler never
+      // fires (Android sometimes suspends the page mid-UPI). The Razorpay
+      // server-side webhook flips the order to paid; this poll detects
+      // that and navigates. On desktop the modal handler usually wins
+      // first — `pollHandledRef` guards against double-navigation.
+      const pollHandledRef = { current: false };
+      const startPoll = () => {
+        const startedAt = Date.now();
+        const POLL_TIMEOUT_MS = 5 * 60_000; // 5 minutes
+        const POLL_INTERVAL_MS = 3000;
+        const tick = async () => {
+          if (pollHandledRef.current) return;
+          if (Date.now() - startedAt > POLL_TIMEOUT_MS) return;
+          try {
+            const resp = await fetch(
+              `/api/razorpay-status?razorpay_order_id=${encodeURIComponent(rpOrder.id)}`
+            );
+            if (resp.ok) {
+              const data = (await resp.json()) as {
+                ok?: boolean;
+                verified?: boolean;
+                orderId?: string | null;
+              };
+              if (data?.verified && !pollHandledRef.current) {
+                pollHandledRef.current = true;
+                toast.success('Payment received');
+                navigate('/order-success', {
+                  state: { orderId: data.orderId ?? internalOrderId },
+                });
+                setSubmitting(null);
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn('[razorpay-status] poll error', err);
+          }
+          window.setTimeout(tick, POLL_INTERVAL_MS);
+        };
+        window.setTimeout(tick, POLL_INTERVAL_MS);
+      };
+      startPoll();
+
       await initiatePayment({
         amount: rpOrder.amount,
         orderId: rpOrder.id,
@@ -268,6 +311,8 @@ export default function OrderCheckout() {
           contact: customer.phone,
         },
         onSuccess: async (resp) => {
+          if (pollHandledRef.current) return;
+          pollHandledRef.current = true;
           // Desktop modal path. Verify on the server (best-effort —
           // failure here just means staff has to reconcile manually,
           // the order itself is already saved).
@@ -288,10 +333,11 @@ export default function OrderCheckout() {
           setSubmitting(null);
         },
         onFailure: () => {
-          // Modal dismissed without paying. The pre-persisted order stays
-          // as `unpaid` — staff can clean it up, or the customer can
-          // retry. Nothing to delete because RLS doesn't let customers
-          // remove orders, and we don't want to anyway (audit trail).
+          // Modal dismissed without paying. Stop polling — the order
+          // stays as `unpaid` and the customer can retry. We don't
+          // delete because RLS doesn't allow it and we want the audit
+          // trail anyway.
+          pollHandledRef.current = true;
           placingRef.current = false;
           setSubmitting(null);
           toast('Payment cancelled', { icon: 'ℹ️' });

@@ -1245,6 +1245,51 @@ export default function Menu() {
       setLatestActiveOrderId(internalOrderId);
       setActiveOrderCount((n) => n + 1);
 
+      // Mobile reliability: poll our /api/razorpay-status alongside the
+      // modal so we still navigate to /order-success if the in-page
+      // handler doesn't fire (Android can suspend the page mid-UPI).
+      // Razorpay's server-side webhook flips the order to paid; the poll
+      // detects it. `pollHandledRef` keeps modal-handler vs. poll from
+      // double-firing the navigate.
+      const pollHandledRef = { current: false };
+      const startPoll = () => {
+        const startedAt = Date.now();
+        const POLL_TIMEOUT_MS = 5 * 60_000;
+        const POLL_INTERVAL_MS = 3000;
+        const tick = async () => {
+          if (pollHandledRef.current) return;
+          if (Date.now() - startedAt > POLL_TIMEOUT_MS) return;
+          try {
+            const resp = await fetch(
+              `/api/razorpay-status?razorpay_order_id=${encodeURIComponent(rpOrder.id)}`
+            );
+            if (resp.ok) {
+              const data = (await resp.json()) as {
+                ok?: boolean;
+                verified?: boolean;
+                orderId?: string | null;
+              };
+              if (data?.verified && !pollHandledRef.current) {
+                pollHandledRef.current = true;
+                toast.success('Payment received');
+                clearCart();
+                setCartOpen(false);
+                navigate('/order-success', {
+                  state: { orderId: data.orderId ?? internalOrderId },
+                });
+                setSubmitting(null);
+                return;
+              }
+            }
+          } catch (err) {
+            console.warn('[razorpay-status] dine-in poll error', err);
+          }
+          window.setTimeout(tick, POLL_INTERVAL_MS);
+        };
+        window.setTimeout(tick, POLL_INTERVAL_MS);
+      };
+      startPoll();
+
       await initiatePayment({
         amount: rpOrder.amount,
         orderId: rpOrder.id,
@@ -1255,6 +1300,8 @@ export default function Menu() {
           contact: customer.phone,
         },
         onSuccess: async (resp) => {
+          if (pollHandledRef.current) return;
+          pollHandledRef.current = true;
           // Desktop modal path. Verify on the server (best-effort —
           // failure here just means staff has to reconcile manually,
           // the order itself is already saved as 'unpaid').
@@ -1277,6 +1324,7 @@ export default function Menu() {
           setSubmitting(null);
         },
         onFailure: () => {
+          pollHandledRef.current = true;
           toast('Payment cancelled', { icon: 'ℹ️' });
           setSubmitting(null);
         },
