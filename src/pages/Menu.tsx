@@ -1245,12 +1245,12 @@ export default function Menu() {
       setLatestActiveOrderId(internalOrderId);
       setActiveOrderCount((n) => n + 1);
 
-      // Mobile reliability: poll our /api/razorpay-status alongside the
-      // modal so we still navigate to /order-success if the in-page
-      // handler doesn't fire (Android can suspend the page mid-UPI).
-      // Razorpay's server-side webhook flips the order to paid; the poll
-      // detects it. `pollHandledRef` keeps modal-handler vs. poll from
-      // double-firing the navigate.
+      // Mobile reliability: poll the Supabase razorpay-status edge
+      // function alongside the modal so we still navigate to
+      // /order-success if the in-page handler doesn't fire. The function
+      // checks DB then falls back to Razorpay's API using the secrets
+      // already on Supabase. `pollHandledRef` keeps modal-handler vs.
+      // poll from double-firing.
       const pollHandledRef = { current: false };
       const startPoll = () => {
         const startedAt = Date.now();
@@ -1260,26 +1260,23 @@ export default function Menu() {
           if (pollHandledRef.current) return;
           if (Date.now() - startedAt > POLL_TIMEOUT_MS) return;
           try {
-            const resp = await fetch(
-              `/api/razorpay-status?razorpay_order_id=${encodeURIComponent(rpOrder.id)}`
-            );
-            if (resp.ok) {
-              const data = (await resp.json()) as {
-                ok?: boolean;
-                verified?: boolean;
-                orderId?: string | null;
-              };
-              if (data?.verified && !pollHandledRef.current) {
-                pollHandledRef.current = true;
-                toast.success('Payment received');
-                clearCart();
-                setCartOpen(false);
-                navigate('/order-success', {
-                  state: { orderId: data.orderId ?? internalOrderId },
-                });
-                setSubmitting(null);
-                return;
-              }
+            const { data, error } = await supabase.functions.invoke<{
+              ok?: boolean;
+              verified?: boolean;
+              orderId?: string | null;
+            }>('razorpay-status', {
+              body: { razorpay_order_id: rpOrder.id },
+            });
+            if (!error && data?.verified && !pollHandledRef.current) {
+              pollHandledRef.current = true;
+              toast.success('Payment received');
+              clearCart();
+              setCartOpen(false);
+              navigate('/order-success', {
+                state: { orderId: data.orderId ?? internalOrderId },
+              });
+              setSubmitting(null);
+              return;
             }
           } catch (err) {
             console.warn('[razorpay-status] dine-in poll error', err);
