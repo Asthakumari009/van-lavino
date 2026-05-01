@@ -789,19 +789,11 @@ function CartDrawer({
             <div className="grid grid-cols-1 gap-3">
               <button
                 disabled={submitting !== null}
-                onClick={() => onSubmit('online')}
+                onClick={() => onSubmit('cash')}
                 className="bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                {submitting === 'online' && <Spinner />}
-                {submitting === 'online' ? 'Opening checkout…' : 'Pay Online →'}
-              </button>
-              <button
-                disabled={submitting !== null}
-                onClick={() => onSubmit('cash')}
-                className="border border-brand-500/50 text-brand-600 py-3.5 rounded-full font-medium tracking-wide hover:border-brand-500 hover:text-brand-500 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
                 {submitting === 'cash' && <Spinner />}
-                {submitting === 'cash' ? 'Placing order…' : 'Cash / Pay Later'}
+                {submitting === 'cash' ? 'Placing order…' : 'Place Order · Pay at Counter'}
               </button>
             </div>
           </div>

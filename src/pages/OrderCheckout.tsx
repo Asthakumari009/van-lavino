@@ -3,8 +3,6 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import {
   ArrowLeft,
-  CreditCard,
-  Loader2,
   MapPin,
   ShoppingBag,
   Truck,
@@ -643,28 +641,15 @@ export default function OrderCheckout() {
             <button
               type="button"
               disabled={!canSubmit}
-              onClick={() => handleSubmit('online')}
-              className="w-full bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
-            >
-              {submitting === 'online' ? (
-                <Loader2 size={16} className="animate-spin" />
-              ) : (
-                <CreditCard size={16} />
-              )}
-              {submitting === 'online' ? 'Opening checkout…' : 'Pay Online'}
-            </button>
-            <button
-              type="button"
-              disabled={!canSubmit}
               onClick={() => handleSubmit('cash')}
-              className="w-full border border-brand-500/50 text-brand-600 py-3.5 rounded-full font-medium tracking-wide hover:border-brand-500 hover:text-brand-500 transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
+              className="w-full bg-brand-500 text-ink py-3.5 rounded-full font-medium tracking-wide hover:bg-brand-400 hover:shadow-glow transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed inline-flex items-center justify-center gap-2"
             >
               {submitting === 'cash' ? <Spinner /> : <Wallet size={16} />}
               {submitting === 'cash'
                 ? 'Placing order…'
                 : isDelivery
-                  ? 'Cash on Delivery'
-                  : 'Pay at Pickup'}
+                  ? 'Place Order · Cash on Delivery'
+                  : 'Place Order · Pay at Pickup'}
             </button>
             <p className="font-mono text-[10px] tracking-[0.25em] uppercase text-cream/65 text-center pt-1">
               Ordering as {customer.name} · +91 {customer.phone}
